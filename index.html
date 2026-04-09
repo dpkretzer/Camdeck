@@ -3,21 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Camdeck</title>
+  <title>KoziKamera Security</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="wrap">
     <header class="titleBlock">
       <p class="eyebrow">Secure camera network</p>
-      <h1>Camdeck</h1>
+      <h1>KoziKamera Security</h1>
     </header>
 
     <section id="homeScreen" class="screen panel panel1 active">
       <p class="panelTitle paneltitle">Access Gateway</p>
       <p class="panelText paneltext">Enter your secure room number to continue.</p>
       <input id="roomId" placeholder="Room number" inputmode="numeric" pattern="[0-9]*" />
+      <input id="cameraName" placeholder="Camera name (optional)" maxlength="24" />
       <button id="connectRoom">Authorize & Connect</button>
+      <button id="rejoinLast" class="secondary">Rejoin last session</button>
     </section>
 
     <section id="roleScreen" class="screen panel panel1">
@@ -31,15 +33,25 @@
     </section>
 
     <div id="statusMessage" class="status"></div>
+    <div id="connectionBadge" class="connectionBadge">Connecting…</div>
 
     <div id="liveScreen" class="screen panel panel1">
       <div class="liveHeader">
         <p id="liveRoomLabel"></p>
-        <button id="disconnectRoom" class="secondary">Disconnect</button>
+        <div class="liveHeaderControls">
+          <button id="toggleMotionFollow" class="secondary">Motion follow: Off</button>
+          <button id="toggleLayout" class="secondary">Focus layout</button>
+          <button id="disconnectRoom" class="secondary">Disconnect</button>
+        </div>
       </div>
 
       <video id="localVideo" autoplay playsinline muted></video>
-      <div id="remoteVideos"></div>
+      <p id="emptyState" class="panelText paneltext">No cameras live yet. Waiting for a camera to join…</p>
+      <div id="remoteVideos" class="grid"></div>
+      <section id="timelinePanel" class="timelinePanel" aria-live="polite">
+        <p class="panelTitle paneltitle">Session timeline</p>
+        <ul id="sessionTimeline"></ul>
+      </section>
 
       <button id="retryPlayback" class="secondary">
         Tap if video doesn't play
