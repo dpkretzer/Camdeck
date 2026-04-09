@@ -24,6 +24,10 @@ let role = null;
 let localStream = null;
 const peers = new Map();
 
+function normalizeRoomId(value) {
+  return value.replace(/\D+/g, "");
+}
+
 function showScreen(screen) {
   [homeScreen, roleScreen, liveScreen].forEach((item) => {
     item.classList.toggle("active", item === screen);
@@ -36,6 +40,59 @@ function setStatus(message) {
 
 function roomId() {
   return normalizeRoomId(roomIdInput.value.trim());
+}
+
+function ensureSocketConnected() {
+  if (socket.connected) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Could not connect to server"));
+    }, 5000);
+
+    const onConnect = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = (err) => {
+      cleanup();
+      reject(err || new Error("Connection error"));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.off("connect", onConnect);
+      socket.off("connect_error", onError);
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("connect_error", onError);
+    socket.connect();
+  });
+}
+
+function joinRoomWithRole(roleName) {
+  return new Promise((resolve, reject) => {
+    socket.emit(
+      "join-room",
+      {
+        roomId: currentRoomId,
+        role: roleName
+      },
+      (response) => {
+        if (!response || !response.ok) {
+          reject(new Error(response?.error || "Failed to join room"));
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
 }
 
 function clearPeersAndVideos() {
@@ -77,49 +134,7 @@ function connectRoom() {
   roomIdInput.value = currentRoomId;
   connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
   liveRoomLabel.textContent = `Room: ${currentRoomId}`;
-  setStatus("");
-  showScreen(roleScreen);
-}
-
-function clearPeersAndVideos() {
-  peers.forEach((pc) => pc.close());
-  peers.clear();
-  remoteVideos.innerHTML = "";
-}
-
-function stopLocalStream() {
-  if (localStream) {
-    localStream.getTracks().forEach((track) => track.stop());
-    localStream = null;
-  }
-  localVideo.srcObject = null;
-}
-
-function leaveRoom() {
-  socket.emit("leave-room");
-  clearPeersAndVideos();
-  stopLocalStream();
-  role = null;
-}
-
-function disconnectAndReturnToRoleScreen() {
-  leaveRoom();
-  showScreen(roleScreen);
-  setStatus("Disconnected from the room.");
-}
-
-function connectRoom() {
-  const enteredRoom = roomId();
-
-  if (!enteredRoom) {
-    alert("Enter a room number");
-    return;
-  }
-
-  currentRoomId = enteredRoom;
-  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
-  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
-  setStatus("");
+  setStatus("Room number accepted. Choose camera or viewer.");
   showScreen(roleScreen);
 }
 
@@ -145,17 +160,15 @@ async function startCamera() {
 
     localVideo.srcObject = localStream;
 
-    socket.emit("join-room", {
-      roomId: currentRoomId,
-      role: "camera"
-    });
+    await joinRoomWithRole("camera");
 
     showScreen(liveScreen);
     setStatus("You are sharing this device as a camera.");
   } catch (err) {
     console.error(err);
-    alert("Camera access denied or not working");
+    alert("Could not join as camera. Check permissions and room number.");
     role = null;
+    stopLocalStream();
   }
 }
 
@@ -172,13 +185,17 @@ async function startViewer() {
   stopLocalStream();
   localVideo.style.display = "none";
 
-  socket.emit("join-room", {
-    roomId: currentRoomId,
-    role: "viewer"
-  });
-
-  showScreen(liveScreen);
-  setStatus("Viewing cameras in this room.");
+  try {
+    await ensureSocketConnected();
+    await joinRoomWithRole("viewer");
+    showScreen(liveScreen);
+    setStatus("Viewing cameras in this room.");
+  } catch (err) {
+    console.error(err);
+    setStatus("Failed to connect. Please try again.");
+    role = null;
+    showScreen(roleScreen);
+  }
 }
 
 function makePeer(targetId, initiator) {
@@ -314,6 +331,8 @@ roomIdInput.addEventListener("keydown", (event) => {
 
 changeRoomBtn.addEventListener("click", () => {
   leaveRoom();
+  currentRoomId = "";
+  roomIdInput.value = "";
   showScreen(homeScreen);
   setStatus("");
 });
@@ -327,3 +346,7 @@ retryPlaybackBtn.addEventListener("click", () => {
 
 startCameraBtn.addEventListener("click", startCamera);
 startViewerBtn.addEventListener("click", startViewer);
+
+roomIdInput.addEventListener("input", () => {
+  roomIdInput.value = normalizeRoomId(roomIdInput.value);
+});

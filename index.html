@@ -13,24 +13,26 @@
       <h1>Camdeck</h1>
     </header>
 
-    <section id="homeScreen" class="screen active">
-      <p>Enter a room number to continue.</p>
-      <input id="roomId" placeholder="Room number" inputmode="numeric" />
-      <button id="connectRoom">Connect to room</button>
+    <section id="homeScreen" class="screen panel panel1 active">
+      <p class="panelTitle paneltitle">Access Gateway</p>
+      <p class="panelText paneltext">Enter your secure room number to continue.</p>
+      <input id="roomId" placeholder="Room number" inputmode="numeric" pattern="[0-9]*" />
+      <button id="connectRoom">Authorize & Connect</button>
     </section>
 
-    <section id="roleScreen" class="screen">
+    <section id="roleScreen" class="screen panel panel1">
+      <p class="panelTitle paneltitle">Connection Established</p>
       <p id="connectedRoomLabel"></p>
       <div class="buttons">
-        <button id="startCamera">Use this tablet as camera</button>
-        <button id="startViewer">View cameras</button>
+        <button id="startCamera">Deploy as camera</button>
+        <button id="startViewer">View camera feeds</button>
       </div>
       <button id="changeRoom" class="secondary">Change room</button>
     </section>
 
     <div id="statusMessage" class="status"></div>
 
-    <div id="liveScreen" class="screen">
+    <div id="liveScreen" class="screen panel panel1">
       <div class="liveHeader">
         <p id="liveRoomLabel"></p>
         <button id="disconnectRoom" class="secondary">Disconnect</button>
