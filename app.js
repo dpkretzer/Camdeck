@@ -12,6 +12,7 @@ const disconnectRoomBtn = document.getElementById("disconnectRoom");
 const retryPlaybackBtn = document.getElementById("retryPlayback");
 const rejoinLastBtn = document.getElementById("rejoinLast");
 const toggleLayoutBtn = document.getElementById("toggleLayout");
+const toggleMotionFollowBtn = document.getElementById("toggleMotionFollow");
 
 const connectedRoomLabel = document.getElementById("connectedRoomLabel");
 const liveRoomLabel = document.getElementById("liveRoomLabel");
@@ -29,8 +30,11 @@ let currentRoomId = "";
 let role = null;
 let localStream = null;
 let layoutMode = "grid";
+let motionFollowEnabled = false;
 const peers = new Map();
 const cameraNames = new Map();
+const motionWatchers = new Map();
+const lastMotionLogAt = new Map();
 
 function normalizeRoomId(value) {
   return value.replace(/\D+/g, "");
@@ -82,6 +86,10 @@ function applyLayout() {
   remoteVideos.classList.toggle("grid", layoutMode === "grid");
   remoteVideos.classList.toggle("focus", layoutMode === "focus");
   toggleLayoutBtn.textContent = layoutMode === "grid" ? "Focus layout" : "Grid layout";
+}
+
+function applyMotionFollowButton() {
+  toggleMotionFollowBtn.textContent = `Motion follow: ${motionFollowEnabled ? "On" : "Off"}`;
 }
 
 function updateEmptyState() {
@@ -159,9 +167,81 @@ function clearPeersAndVideos() {
   peers.forEach((pc) => pc.close());
   peers.clear();
   cameraNames.clear();
+  motionWatchers.forEach(({ intervalId }) => clearInterval(intervalId));
+  motionWatchers.clear();
+  lastMotionLogAt.clear();
   remoteVideos.innerHTML = "";
   sessionTimeline.innerHTML = "";
   updateEmptyState();
+}
+
+function detectMotionOnVideo(id, videoEl) {
+  if (motionWatchers.has(id)) {
+    return;
+  }
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return;
+  let previousFrame = null;
+
+  const intervalId = setInterval(() => {
+    if (!document.body.contains(videoEl) || videoEl.readyState < 2) {
+      return;
+    }
+
+    const w = Math.min(videoEl.videoWidth || 0, 320);
+    const h = Math.min(videoEl.videoHeight || 0, 180);
+    if (!w || !h) return;
+
+    canvas.width = w;
+    canvas.height = h;
+    context.drawImage(videoEl, 0, 0, w, h);
+    const frame = context.getImageData(0, 0, w, h).data;
+
+    if (!previousFrame) {
+      previousFrame = new Uint8ClampedArray(frame);
+      return;
+    }
+
+    let changed = 0;
+    const sampleStep = 16;
+    for (let i = 0; i < frame.length; i += sampleStep) {
+      const diff =
+        Math.abs(frame[i] - previousFrame[i]) +
+        Math.abs(frame[i + 1] - previousFrame[i + 1]) +
+        Math.abs(frame[i + 2] - previousFrame[i + 2]);
+      if (diff > 40) changed += 1;
+    }
+
+    previousFrame = new Uint8ClampedArray(frame);
+    const motionDetected = changed > 120;
+    const card = document.getElementById(`card-${id}`);
+    const status = document.getElementById(`feed-status-${id}`);
+    if (!card || !status) return;
+
+    card.classList.toggle("motionActive", motionDetected);
+    status.textContent = motionDetected ? "Motion" : "Live";
+    status.classList.toggle("motion", motionDetected);
+
+    if (!motionDetected) return;
+
+    const now = Date.now();
+    const lastLogged = lastMotionLogAt.get(id) || 0;
+    if (now - lastLogged > 8000) {
+      addTimelineEvent(`Motion detected on ${cameraNames.get(id) || "camera feed"}.`);
+      lastMotionLogAt.set(id, now);
+    }
+
+    if (motionFollowEnabled) {
+      layoutMode = "focus";
+      applyLayout();
+      remoteVideos.prepend(card);
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, 900);
+
+  motionWatchers.set(id, { intervalId });
 }
 
 function stopLocalStream() {
@@ -389,12 +469,14 @@ function attachRemoteVideo(id, stream) {
 
     card.append(cardHeader, el);
     remoteVideos.appendChild(card);
+    detectMotionOnVideo(id, el);
   }
 
   el.srcObject = stream;
   el.play().catch((err) => {
     console.log("play blocked:", err);
   });
+  detectMotionOnVideo(id, el);
   updateEmptyState();
 }
 
@@ -454,6 +536,12 @@ socket.on("camera-left", ({ id }) => {
   }
 
   cameraNames.delete(id);
+  const watcher = motionWatchers.get(id);
+  if (watcher) {
+    clearInterval(watcher.intervalId);
+    motionWatchers.delete(id);
+  }
+  lastMotionLogAt.delete(id);
   const card = document.getElementById(`card-${id}`);
   if (card) card.remove();
   addTimelineEvent("A camera disconnected.");
@@ -504,6 +592,12 @@ toggleLayoutBtn.addEventListener("click", () => {
   applyLayout();
 });
 
+toggleMotionFollowBtn.addEventListener("click", () => {
+  motionFollowEnabled = !motionFollowEnabled;
+  applyMotionFollowButton();
+  addTimelineEvent(`Motion follow ${motionFollowEnabled ? "enabled" : "disabled"}.`);
+});
+
 rejoinLastBtn.addEventListener("click", async () => {
   const previous = loadSession();
   if (!previous?.roomId) {
@@ -531,6 +625,7 @@ roomIdInput.addEventListener("input", () => {
 });
 
 applyLayout();
+applyMotionFollowButton();
 setConnectionBadge(socket.connected);
 
 const previous = loadSession();

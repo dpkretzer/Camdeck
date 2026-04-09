@@ -118,6 +118,12 @@ video {
   border-radius: 12px;
   padding: 10px;
   background: rgba(7, 18, 32, 0.72);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.videoCard.motionActive {
+  border-color: rgba(255, 211, 115, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 211, 115, 0.2);
 }
 
 .videoCardHeader {
@@ -139,6 +145,11 @@ video {
 .feedStatus {
   font-size: 0.72rem;
   color: #8ce9ae;
+}
+
+.feedStatus.motion {
+  color: #ffd678;
+  font-weight: 700;
 }
 
 .videoActions {
