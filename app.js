@@ -1,3 +1,8 @@
+const params = new URLSearchParams(window.location.search);
+const roomId = params.get("room");
+
+console.log("Room ID:", roomId);
+
 const socket = io();
 
 const homeScreen = document.getElementById("homeScreen");
