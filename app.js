@@ -1,11 +1,13 @@
+const startCameraBtn = document.getElementById("startCamera");
 const video = document.getElementById("video");
 
-startBtn.addEventListener("click", async () => {
+startCameraBtn.addEventListener("click", async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: false
     });
+
     video.srcObject = stream;
   } catch (err) {
     console.error("Camera error:", err);
