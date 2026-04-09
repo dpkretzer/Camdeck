@@ -13,15 +13,15 @@
       <h1>Camdeck</h1>
     </header>
 
-    <section id="homeScreen" class="screen panel active">
-      <p class="panelTitle">Access Gateway</p>
-      <p class="panelText">Enter your secure room number to continue.</p>
+    <section id="homeScreen" class="screen panel panel1 active">
+      <p class="panelTitle paneltitle">Access Gateway</p>
+      <p class="panelText paneltext">Enter your secure room number to continue.</p>
       <input id="roomId" placeholder="Room number" inputmode="numeric" pattern="[0-9]*" />
       <button id="connectRoom">Authorize & Connect</button>
     </section>
 
-    <section id="roleScreen" class="screen panel">
-      <p class="panelTitle">Connection Established</p>
+    <section id="roleScreen" class="screen panel panel1">
+      <p class="panelTitle paneltitle">Connection Established</p>
       <p id="connectedRoomLabel"></p>
       <div class="buttons">
         <button id="startCamera">Deploy as camera</button>
@@ -32,7 +32,7 @@
 
     <div id="statusMessage" class="status"></div>
 
-    <div id="liveScreen" class="screen panel">
+    <div id="liveScreen" class="screen panel panel1">
       <div class="liveHeader">
         <p id="liveRoomLabel"></p>
         <button id="disconnectRoom" class="secondary">Disconnect</button>

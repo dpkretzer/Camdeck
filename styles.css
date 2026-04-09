@@ -41,7 +41,8 @@ h1 {
   display: block;
 }
 
-.panel {
+.panel,
+.panel1 {
   border: 1px solid rgba(87, 176, 255, 0.34);
   background: linear-gradient(180deg, rgba(13, 24, 45, 0.94), rgba(9, 17, 33, 0.92));
   border-radius: 16px;
@@ -49,7 +50,8 @@ h1 {
   box-shadow: 0 0 0 1px rgba(138, 222, 255, 0.12), 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-.panelTitle {
+.panelTitle,
+.paneltitle {
   margin: 0;
   color: #7ad9ff;
   font-weight: 700;
@@ -58,7 +60,8 @@ h1 {
   font-size: 0.82rem;
 }
 
-.panelText {
+.panelText,
+.paneltext {
   color: #d0e7ff;
 }
 
