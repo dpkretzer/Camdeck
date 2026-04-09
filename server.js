@@ -42,10 +42,14 @@ function normalizePhone(value) {
 }
 
 async function sendMovementSms(to, roomId, cameraName) {
-  if (!smsEnabled) return false;
+  if (!smsEnabled) {
+    throw new Error("SMS is not configured on the server.");
+  }
 
   const normalizedTo = normalizePhone(to);
-  if (!/^\+\d{10,15}$/.test(normalizedTo)) return false;
+  if (!/^\+\d{10,15}$/.test(normalizedTo)) {
+    throw new Error("Destination phone is invalid. Use country code (E.164).");
+  }
 
   const body = `Camdeck alert: movement detected in room ${roomId} on ${cameraName}.`;
   const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
@@ -70,7 +74,10 @@ async function sendMovementSms(to, roomId, cameraName) {
   }
 
   const payloadJson = await response.json();
-  return payloadJson.sid || true;
+  return {
+    sid: payloadJson.sid || "",
+    status: payloadJson.status || "queued"
+  };
 }
 
 function normalizeEmail(value) {
@@ -78,10 +85,14 @@ function normalizeEmail(value) {
 }
 
 async function sendMovementEmail(to, roomId, cameraName, occurredAtIso) {
-  if (!emailEnabled) return false;
+  if (!emailEnabled) {
+    throw new Error("Email is not configured on the server.");
+  }
 
   const normalizedTo = normalizeEmail(to);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedTo)) return false;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedTo)) {
+    throw new Error("Destination email is invalid.");
+  }
 
   const occurredAt = new Date(occurredAtIso).toLocaleString();
   const payload = {
@@ -110,7 +121,7 @@ async function sendMovementEmail(to, roomId, cameraName, occurredAtIso) {
     throw new Error(`SendGrid API ${response.status}: ${responseText}`);
   }
 
-  return true;
+  return { status: "accepted" };
 }
 
 function removeSocketFromRoom(socket) {
@@ -218,8 +229,12 @@ io.on("connection", (socket) => {
 
       if (type === "phone") {
         sendMovementSms(contact, roomId, cameraName || room.cameraNames.get(key) || "Camera feed")
-          .then(() => {
-            io.to(viewerSocketId).emit("notification-delivery", { channel: "sms", status: "sent" });
+          .then((result) => {
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "sms",
+              status: "accepted",
+              detail: `Provider status: ${result.status}${result.sid ? ` (sid: ${result.sid})` : ""}`
+            });
           })
           .catch((err) => {
             console.error("Failed to send movement SMS:", err.message);
@@ -239,7 +254,11 @@ io.on("connection", (socket) => {
           occurredAt
         )
           .then(() => {
-            io.to(viewerSocketId).emit("notification-delivery", { channel: "email", status: "sent" });
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "email",
+              status: "accepted",
+              detail: "Accepted by email provider."
+            });
           })
           .catch((err) => {
             console.error("Failed to send movement email:", err.message);
@@ -269,8 +288,12 @@ io.on("connection", (socket) => {
 
       if (type === "phone") {
         sendMovementSms(contact, roomId, "Test alert")
-          .then(() => {
-            io.to(viewerSocketId).emit("notification-delivery", { channel: "sms", status: "sent" });
+          .then((result) => {
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "sms",
+              status: "accepted",
+              detail: `Provider status: ${result.status}${result.sid ? ` (sid: ${result.sid})` : ""}`
+            });
           })
           .catch((err) => {
             io.to(viewerSocketId).emit("notification-delivery", {
@@ -284,7 +307,11 @@ io.on("connection", (socket) => {
       if (type === "email") {
         sendMovementEmail(contact, roomId, "Test alert", occurredAt)
           .then(() => {
-            io.to(viewerSocketId).emit("notification-delivery", { channel: "email", status: "sent" });
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "email",
+              status: "accepted",
+              detail: "Accepted by email provider."
+            });
           })
           .catch((err) => {
             io.to(viewerSocketId).emit("notification-delivery", {

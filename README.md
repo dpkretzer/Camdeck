@@ -4,6 +4,7 @@
 
 If viewers sign in with a **phone number**, Camdeck can send SMS alerts when movement is detected.
 You can also use the in-app **Send test alert** button after joining as a viewer to validate delivery.
+The UI now reports provider acceptance status (with Twilio SID when available). If a message is accepted but not delivered, check Twilio logs/verified recipient settings.
 
 Set the following environment variables before starting the server:
 

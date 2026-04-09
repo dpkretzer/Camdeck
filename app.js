@@ -625,9 +625,9 @@ socket.on("movement-alert", async ({ cameraName, contact, at }) => {
   }
 });
 
-socket.on("notification-delivery", ({ channel, status, error }) => {
-  if (status === "sent") {
-    addTimelineEvent(`${channel.toUpperCase()} alert sent successfully.`);
+socket.on("notification-delivery", ({ channel, status, error, detail }) => {
+  if (status === "accepted") {
+    addTimelineEvent(`${channel.toUpperCase()} alert accepted. ${detail || ""}`.trim());
     return;
   }
 
