@@ -136,6 +136,8 @@ async function startCamera() {
   localVideo.style.display = "block";
 
   try {
+    await ensureSocketConnected();
+
     localStream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: false
@@ -157,7 +159,7 @@ async function startCamera() {
   }
 }
 
-function startViewer() {
+async function startViewer() {
   role = "viewer";
 
   if (!currentRoomId) {

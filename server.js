@@ -43,8 +43,18 @@ function removeSocketFromRoom(socket) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join-room", ({ roomId, role }) => {
-    if (!roomId || !role) return;
+  socket.on("join-room", ({ roomId, role }, callback = () => {}) => {
+    if (!roomId || !role) {
+      callback({ ok: false, error: "Missing room or role" });
+      return;
+    }
+
+    if (!["camera", "viewer"].includes(role)) {
+      callback({ ok: false, error: "Invalid role" });
+      return;
+    }
+
+    removeSocketFromRoom(socket);
 
     removeSocketFromRoom(socket);
 
@@ -63,6 +73,12 @@ io.on("connection", (socket) => {
       room.viewers.add(socket.id);
       socket.emit("existing-cameras", [...room.cameras]);
     }
+
+    callback({ ok: true });
+  });
+
+  socket.on("leave-room", () => {
+    removeSocketFromRoom(socket);
   });
 
   socket.on("leave-room", () => {
