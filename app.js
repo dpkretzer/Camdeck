@@ -111,10 +111,16 @@ function attachRemoteVideo(id, stream) {
     el.id = `video-${id}`;
     el.autoplay = true;
     el.playsInline = true;
+    el.muted = true;
+    el.controls = true;
     remoteVideos.appendChild(el);
   }
 
   el.srcObject = stream;
+
+  el.play().catch((err) => {
+    console.log("Remote video play blocked:", err);
+  });
 }
 
 socket.on("existing-cameras", (cameraIds) => {
