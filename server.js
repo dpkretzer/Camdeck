@@ -13,7 +13,13 @@ const rooms = new Map();
 
 function getRoom(roomId) {
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, { cameras: new Set(), viewers: new Set() });
+    rooms.set(roomId, {
+      cameras: new Set(),
+      viewers: new Set(),
+      cameraNames: new Map(),
+      subscribers: new Map(),
+      lastMovementAtByCamera: new Map()
+    });
   }
   return rooms.get(roomId);
 }
@@ -26,11 +32,13 @@ function removeSocketFromRoom(socket) {
 
   if (role === "camera") {
     room.cameras.delete(socket.id);
+    room.cameraNames.delete(socket.id);
     socket.to(roomId).emit("camera-left", { id: socket.id });
   }
 
   if (role === "viewer") {
     room.viewers.delete(socket.id);
+    room.subscribers.delete(socket.id);
   }
 
   if (room.cameras.size === 0 && room.viewers.size === 0) {
@@ -43,7 +51,7 @@ function removeSocketFromRoom(socket) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join-room", ({ roomId, role }, callback = () => {}) => {
+  socket.on("join-room", ({ roomId, role, name, notificationIdentity }, callback = () => {}) => {
     if (!roomId || !role) {
       callback({ ok: false, error: "Missing room or role" });
       return;
@@ -64,12 +72,25 @@ io.on("connection", (socket) => {
 
     if (role === "camera") {
       room.cameras.add(socket.id);
-      socket.to(roomId).emit("camera-joined", { id: socket.id });
+      const displayName = typeof name === "string" ? name.trim().slice(0, 24) : "";
+      room.cameraNames.set(socket.id, displayName || `Camera ${room.cameras.size}`);
+      socket.to(roomId).emit("camera-joined", {
+        id: socket.id,
+        name: room.cameraNames.get(socket.id)
+      });
     }
 
     if (role === "viewer") {
       room.viewers.add(socket.id);
-      socket.emit("existing-cameras", [...room.cameras]);
+      if (notificationIdentity && notificationIdentity.value) {
+        const contact = String(notificationIdentity.value).trim().slice(0, 128);
+        const type = notificationIdentity.type === "phone" ? "phone" : "email";
+        room.subscribers.set(socket.id, { type, contact });
+      }
+      socket.emit(
+        "existing-cameras",
+        [...room.cameras].map((id) => ({ id, name: room.cameraNames.get(id) || "Camera feed" }))
+      );
     }
 
     callback({ ok: true });
@@ -83,6 +104,27 @@ io.on("connection", (socket) => {
     io.to(target).emit("signal", {
       from: socket.id,
       data
+    });
+  });
+
+  socket.on("motion-event", ({ cameraId, cameraName }) => {
+    const roomId = socket.data?.roomId;
+    if (!roomId || !rooms.has(roomId)) return;
+    const room = rooms.get(roomId);
+
+    const key = cameraId || socket.id;
+    const now = Date.now();
+    const last = room.lastMovementAtByCamera.get(key) || 0;
+    if (now - last < 8000) return;
+    room.lastMovementAtByCamera.set(key, now);
+
+    room.subscribers.forEach(({ contact }, viewerSocketId) => {
+      io.to(viewerSocketId).emit("movement-alert", {
+        cameraId: key,
+        cameraName: cameraName || room.cameraNames.get(key) || "Camera feed",
+        contact,
+        at: new Date(now).toISOString()
+      });
     });
   });
 
