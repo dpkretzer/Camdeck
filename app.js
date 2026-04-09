@@ -644,3 +644,13 @@ if (previous?.roomId) {
 if (previous?.cameraName) {
   cameraNameInput.value = previous.cameraName;
 }
+document.getElementById("connectRoom").onclick = () => {
+  const roomId = document.getElementById("roomId").value;
+
+  if (!roomId) {
+    alert("Enter a room number");
+    return;
+  }
+
+  window.location.href = `/?room=${roomId}`;
+};
