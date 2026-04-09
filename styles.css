@@ -126,6 +126,7 @@ video {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .cameraName {
@@ -138,6 +139,11 @@ video {
 .feedStatus {
   font-size: 0.72rem;
   color: #8ce9ae;
+}
+
+.videoActions {
+  display: flex;
+  gap: 6px;
 }
 
 .secondary {
@@ -178,6 +184,25 @@ video {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.timelinePanel {
+  margin-top: 18px;
+  border-top: 1px solid rgba(139, 225, 255, 0.24);
+  padding-top: 12px;
+}
+
+#sessionTimeline {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow-y: auto;
+  color: #d0e7ff;
+  font-size: 0.86rem;
+}
+
+#sessionTimeline li {
+  margin-bottom: 6px;
 }
 
 button {

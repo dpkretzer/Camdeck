@@ -18,6 +18,7 @@ const liveRoomLabel = document.getElementById("liveRoomLabel");
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
 const emptyState = document.getElementById("emptyState");
+const sessionTimeline = document.getElementById("sessionTimeline");
 
 const startCameraBtn = document.getElementById("startCamera");
 const startViewerBtn = document.getElementById("startViewer");
@@ -88,6 +89,18 @@ function updateEmptyState() {
   emptyState.style.display = show ? "block" : "none";
 }
 
+function addTimelineEvent(message) {
+  const item = document.createElement("li");
+  const now = new Date();
+  const stamp = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  item.textContent = `[${stamp}] ${message}`;
+  sessionTimeline.prepend(item);
+
+  while (sessionTimeline.children.length > 30) {
+    sessionTimeline.removeChild(sessionTimeline.lastChild);
+  }
+}
+
 function ensureSocketConnected() {
   if (socket.connected) {
     return Promise.resolve();
@@ -147,6 +160,7 @@ function clearPeersAndVideos() {
   peers.clear();
   cameraNames.clear();
   remoteVideos.innerHTML = "";
+  sessionTimeline.innerHTML = "";
   updateEmptyState();
 }
 
@@ -215,6 +229,7 @@ async function startCamera() {
 
     showScreen(liveScreen);
     setStatus("You are sharing this device as a camera.");
+    addTimelineEvent("Camera session started.");
   } catch (err) {
     console.error(err);
     alert("Could not join as camera. Check permissions and room number.");
@@ -242,6 +257,7 @@ async function startViewer() {
     saveSession("viewer");
     showScreen(liveScreen);
     setStatus("Viewing cameras in this room.");
+    addTimelineEvent("Viewer session started.");
     updateEmptyState();
   } catch (err) {
     console.error(err);
@@ -322,6 +338,9 @@ function attachRemoteVideo(id, stream) {
     status.id = `feed-status-${id}`;
     status.textContent = "Live";
 
+    const actions = document.createElement("div");
+    actions.className = "videoActions";
+
     const fullScreenBtn = document.createElement("button");
     fullScreenBtn.className = "secondary";
     fullScreenBtn.textContent = "Fullscreen";
@@ -333,7 +352,33 @@ function attachRemoteVideo(id, stream) {
       }
     });
 
-    cardHeader.append(name, status, fullScreenBtn);
+    const snapshotBtn = document.createElement("button");
+    snapshotBtn.className = "secondary";
+    snapshotBtn.textContent = "Snapshot";
+    snapshotBtn.addEventListener("click", () => {
+      const video = document.getElementById(`video-${id}`);
+      if (!video || video.readyState < 2) {
+        setStatus("Snapshot unavailable until video starts.");
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const link = document.createElement("a");
+      const safeName = (cameraNames.get(id) || "camera-feed").replace(/\s+/g, "-").toLowerCase();
+      link.href = canvas.toDataURL("image/png");
+      link.download = `${safeName}-${Date.now()}.png`;
+      link.click();
+      addTimelineEvent(`Snapshot saved from ${cameraNames.get(id) || "camera feed"}.`);
+    });
+
+    actions.append(fullScreenBtn, snapshotBtn);
+    cardHeader.append(name, status, actions);
 
     el = document.createElement("video");
     el.id = `video-${id}`;
@@ -358,6 +403,7 @@ socket.on("existing-cameras", (cameras) => {
 
   cameras.forEach(({ id, name }) => {
     cameraNames.set(id, name || "Camera feed");
+    addTimelineEvent(`${cameraNames.get(id)} available.`);
     if (!peers.has(id)) {
       makePeer(id, true);
     }
@@ -367,6 +413,7 @@ socket.on("existing-cameras", (cameras) => {
 socket.on("camera-joined", ({ id, name }) => {
   if (role !== "viewer") return;
   cameraNames.set(id, name || "Camera feed");
+  addTimelineEvent(`${cameraNames.get(id)} joined.`);
 
   if (!peers.has(id)) {
     makePeer(id, true);
@@ -409,6 +456,7 @@ socket.on("camera-left", ({ id }) => {
   cameraNames.delete(id);
   const card = document.getElementById(`card-${id}`);
   if (card) card.remove();
+  addTimelineEvent("A camera disconnected.");
   updateEmptyState();
 });
 
@@ -420,6 +468,7 @@ socket.on("disconnect", () => {
   setConnectionBadge(false);
   if (role) {
     setStatus("Connection lost. Reconnecting…");
+    addTimelineEvent("Socket disconnected. Reconnecting…");
   }
 });
 

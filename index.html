@@ -47,6 +47,10 @@
       <video id="localVideo" autoplay playsinline muted></video>
       <p id="emptyState" class="panelText paneltext">No cameras live yet. Waiting for a camera to join…</p>
       <div id="remoteVideos" class="grid"></div>
+      <section id="timelinePanel" class="timelinePanel" aria-live="polite">
+        <p class="panelTitle paneltitle">Session timeline</p>
+        <ul id="sessionTimeline"></ul>
+      </section>
 
       <button id="retryPlayback" class="secondary">
         Tap if video doesn't play
