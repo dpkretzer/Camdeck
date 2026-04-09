@@ -117,6 +117,8 @@ async function createOffer(targetId, pc) {
 }
 
 function attachRemoteVideo(id, stream) {
+  console.log("Attaching video for:", id);
+
   let el = document.getElementById(`video-${id}`);
 
   if (!el) {
@@ -125,15 +127,20 @@ function attachRemoteVideo(id, stream) {
     el.autoplay = true;
     el.playsInline = true;
     el.muted = true;
-    el.controls = true;
+
+    el.style.width = "100%";
+    el.style.marginTop = "10px";
+
     remoteVideos.appendChild(el);
   }
 
   el.srcObject = stream;
 
-  el.play().catch((err) => {
-    console.log("Remote video play blocked:", err);
-  });
+  setTimeout(() => {
+    el.play().catch(err => {
+      console.log("Play blocked:", err);
+    });
+  }, 500);
 }
 
 socket.on("existing-cameras", (cameraIds) => {
