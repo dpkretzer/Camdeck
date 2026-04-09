@@ -13,7 +13,7 @@ const rooms = new Map();
 
 function getRoom(roomId) {
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, { cameras: new Set(), viewers: new Set() });
+    rooms.set(roomId, { cameras: new Set(), viewers: new Set(), cameraNames: new Map() });
   }
   return rooms.get(roomId);
 }
@@ -26,6 +26,7 @@ function removeSocketFromRoom(socket) {
 
   if (role === "camera") {
     room.cameras.delete(socket.id);
+    room.cameraNames.delete(socket.id);
     socket.to(roomId).emit("camera-left", { id: socket.id });
   }
 
@@ -43,7 +44,7 @@ function removeSocketFromRoom(socket) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join-room", ({ roomId, role }, callback = () => {}) => {
+  socket.on("join-room", ({ roomId, role, name }, callback = () => {}) => {
     if (!roomId || !role) {
       callback({ ok: false, error: "Missing room or role" });
       return;
@@ -64,12 +65,20 @@ io.on("connection", (socket) => {
 
     if (role === "camera") {
       room.cameras.add(socket.id);
-      socket.to(roomId).emit("camera-joined", { id: socket.id });
+      const displayName = typeof name === "string" ? name.trim().slice(0, 24) : "";
+      room.cameraNames.set(socket.id, displayName || `Camera ${room.cameras.size}`);
+      socket.to(roomId).emit("camera-joined", {
+        id: socket.id,
+        name: room.cameraNames.get(socket.id)
+      });
     }
 
     if (role === "viewer") {
       room.viewers.add(socket.id);
-      socket.emit("existing-cameras", [...room.cameras]);
+      socket.emit(
+        "existing-cameras",
+        [...room.cameras].map((id) => ({ id, name: room.cameraNames.get(id) || "Camera feed" }))
+      );
     }
 
     callback({ ok: true });
