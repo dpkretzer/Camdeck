@@ -35,7 +35,50 @@ function setStatus(message) {
 }
 
 function roomId() {
-  return roomIdInput.value.trim();
+  return normalizeRoomId(roomIdInput.value.trim());
+}
+
+function clearPeersAndVideos() {
+  peers.forEach((pc) => pc.close());
+  peers.clear();
+  remoteVideos.innerHTML = "";
+}
+
+function stopLocalStream() {
+  if (localStream) {
+    localStream.getTracks().forEach((track) => track.stop());
+    localStream = null;
+  }
+  localVideo.srcObject = null;
+}
+
+function leaveRoom() {
+  socket.emit("leave-room");
+  clearPeersAndVideos();
+  stopLocalStream();
+  role = null;
+}
+
+function disconnectAndReturnToRoleScreen() {
+  leaveRoom();
+  showScreen(roleScreen);
+  setStatus("Disconnected from the room.");
+}
+
+function connectRoom() {
+  const enteredRoom = roomId();
+
+  if (!enteredRoom) {
+    alert("Enter a room number");
+    return;
+  }
+
+  currentRoomId = enteredRoom;
+  roomIdInput.value = currentRoomId;
+  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
+  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
+  setStatus("");
+  showScreen(roleScreen);
 }
 
 function clearPeersAndVideos() {

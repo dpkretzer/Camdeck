@@ -1,13 +1,17 @@
 body {
-  font-family: Arial, sans-serif;
-  background: #111;
-  color: white;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.15), transparent 35%),
+    radial-gradient(circle at 80% 10%, rgba(0, 153, 255, 0.22), transparent 40%),
+    linear-gradient(160deg, #040b16, #02060c 45%, #07111f);
+  color: #e7f6ff;
   margin: 0;
-  padding: 20px;
+  min-height: 100vh;
+  padding: 24px;
 }
 
 .wrap {
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
@@ -21,9 +25,21 @@ body {
 
 input, button {
   padding: 12px;
-  margin: 8px 0;
+  margin: 8px 0 10px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid rgba(126, 201, 255, 0.34);
+  background: rgba(4, 11, 22, 0.85);
+  color: #e8f7ff;
+}
+
+input {
+  width: min(420px, 100%);
+  outline: none;
+}
+
+input:focus {
+  border-color: rgba(117, 221, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(117, 221, 255, 0.2);
 }
 
 .buttons {
@@ -34,10 +50,11 @@ input, button {
 
 video {
   width: 100%;
-  max-width: 500px;
+  max-width: 560px;
   margin-top: 20px;
   background: black;
   border-radius: 12px;
+  border: 1px solid rgba(139, 225, 255, 0.24);
 }
 
 #remoteVideos {
