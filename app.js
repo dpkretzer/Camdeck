@@ -1,6 +1,6 @@
 const video = document.getElementById("video");
 
-async function startCamera() {
+startBtn.addEventListener("click", async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
@@ -9,7 +9,6 @@ async function startCamera() {
     video.srcObject = stream;
   } catch (err) {
     console.error("Camera error:", err);
+    alert("Camera access denied or not working");
   }
-}
-
-startCamera();
+});
