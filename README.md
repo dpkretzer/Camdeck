@@ -18,3 +18,20 @@ TWILIO_AUTH_TOKEN=xxxxxxxx \
 TWILIO_FROM_NUMBER=+15551234567 \
 npm start
 ```
+
+## Email movement notifications (SendGrid)
+
+If viewers sign in with an **email address**, Camdeck can send email alerts when movement is detected.
+
+Set these environment variables:
+
+- `SENDGRID_API_KEY`
+- `EMAIL_FROM` (verified sender identity in SendGrid)
+
+Example:
+
+```bash
+SENDGRID_API_KEY=SG.xxxxxxxx \
+EMAIL_FROM=alerts@yourdomain.com \
+npm start
+```
