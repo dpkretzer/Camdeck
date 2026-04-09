@@ -7,6 +7,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || "";
+const smsEnabled = Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || "";
+const EMAIL_FROM = process.env.EMAIL_FROM || "";
+const emailEnabled = Boolean(SENDGRID_API_KEY && EMAIL_FROM);
+
 app.use(express.static(path.join(__dirname)));
 
 const rooms = new Map();
@@ -22,6 +30,86 @@ function getRoom(roomId) {
     });
   }
   return rooms.get(roomId);
+}
+
+function normalizePhone(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("+")) {
+    return `+${trimmed.slice(1).replace(/\D+/g, "")}`;
+  }
+  return `+1${trimmed.replace(/\D+/g, "")}`;
+}
+
+async function sendMovementSms(to, roomId, cameraName) {
+  if (!smsEnabled) return false;
+
+  const normalizedTo = normalizePhone(to);
+  if (!/^\+\d{10,15}$/.test(normalizedTo)) return false;
+
+  const body = `Camdeck alert: movement detected in room ${roomId} on ${cameraName}.`;
+  const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+  const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64");
+  const payload = new URLSearchParams({
+    To: normalizedTo,
+    From: TWILIO_FROM_NUMBER,
+    Body: body
+  });
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: payload
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Twilio API ${response.status}: ${responseText}`);
+  }
+
+  return true;
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function sendMovementEmail(to, roomId, cameraName, occurredAtIso) {
+  if (!emailEnabled) return false;
+
+  const normalizedTo = normalizeEmail(to);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedTo)) return false;
+
+  const occurredAt = new Date(occurredAtIso).toLocaleString();
+  const payload = {
+    personalizations: [{ to: [{ email: normalizedTo }] }],
+    from: { email: EMAIL_FROM },
+    subject: `Camdeck movement alert for room ${roomId}`,
+    content: [
+      {
+        type: "text/plain",
+        value: `Movement detected in room ${roomId} on ${cameraName} at ${occurredAt}.`
+      }
+    ]
+  };
+
+  const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SENDGRID_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`SendGrid API ${response.status}: ${responseText}`);
+  }
+
+  return true;
 }
 
 function removeSocketFromRoom(socket) {
@@ -118,13 +206,31 @@ io.on("connection", (socket) => {
     if (now - last < 8000) return;
     room.lastMovementAtByCamera.set(key, now);
 
-    room.subscribers.forEach(({ contact }, viewerSocketId) => {
+    room.subscribers.forEach(({ contact, type }, viewerSocketId) => {
+      const occurredAt = new Date(now).toISOString();
       io.to(viewerSocketId).emit("movement-alert", {
         cameraId: key,
         cameraName: cameraName || room.cameraNames.get(key) || "Camera feed",
         contact,
-        at: new Date(now).toISOString()
+        at: occurredAt
       });
+
+      if (type === "phone") {
+        sendMovementSms(contact, roomId, cameraName || room.cameraNames.get(key) || "Camera feed").catch((err) => {
+          console.error("Failed to send movement SMS:", err.message);
+        });
+      }
+
+      if (type === "email") {
+        sendMovementEmail(
+          contact,
+          roomId,
+          cameraName || room.cameraNames.get(key) || "Camera feed",
+          occurredAt
+        ).catch((err) => {
+          console.error("Failed to send movement email:", err.message);
+        });
+      }
     });
   });
 
