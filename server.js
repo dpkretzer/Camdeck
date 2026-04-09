@@ -56,6 +56,8 @@ io.on("connection", (socket) => {
 
     removeSocketFromRoom(socket);
 
+    removeSocketFromRoom(socket);
+
     socket.data.roomId = roomId;
     socket.data.role = role;
     socket.join(roomId);
@@ -73,6 +75,10 @@ io.on("connection", (socket) => {
     }
 
     callback({ ok: true });
+  });
+
+  socket.on("leave-room", () => {
+    removeSocketFromRoom(socket);
   });
 
   socket.on("leave-room", () => {
