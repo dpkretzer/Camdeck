@@ -3,62 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tablet Security Cam</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <title>Camdeck</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <h1>Tablet Security Cam</h1>
-      <p>Use old tablets as browser-based security cameras.</p>
-    </header>
+    <h1>Camdeck</h1>
 
-    <section class="card controls">
-      <label>
-        Room code
-        <input id="roomId" placeholder="example: home-cam" />
-      </label>
+    <input id="roomId" placeholder="Room code" />
+    <div class="buttons">
+      <button id="startCamera">Use this tablet as camera</button>
+      <button id="startViewer">View cameras</button>
+    </div>
 
-      <label>
-        Device name
-        <input id="deviceLabel" placeholder="Front Door Tablet" />
-      </label>
-
-      <div class="role-buttons">
-        <button id="startCamera">Use this tablet as a camera</button>
-        <button id="startViewer" class="secondary">View cameras</button>
-      </div>
-      
-<video id="video" autoplay playsinline style="width:100%; margin-top:20px;"></video>
-     
-      <p class="small">
-        Open this page on each tablet. Give them the same room code.
-        Use “View cameras” on your phone or another device.
-      </p>
-    </section>
-
-    <section id="cameraPanel" class="card hidden">
-      <div class="panel-head">
-        <h2>Camera mode</h2>
-        <span id="cameraStatus" class="badge">Connecting…</span>
-      </div>
-      <video id="localVideo" autoplay playsinline muted></video>
-      <div class="button-row">
-        <button id="toggleMute" class="secondary">Mute mic</button>
-        <button id="switchCam" class="secondary">Switch camera</button>
-      </div>
-    </section>
-
-    <section id="viewerPanel" class="card hidden">
-      <div class="panel-head">
-        <h2>Viewer mode</h2>
-        <span id="viewerStatus" class="badge">Waiting for cameras…</span>
-      </div>
-      <div id="remoteGrid" class="grid"></div>
-    </section>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <div id="remoteVideos"></div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
