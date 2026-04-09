@@ -11,7 +11,10 @@ let localStream = null;
 const peers = new Map();
 
 const rtcConfig = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ]
 };
 
 function roomId() {
@@ -46,6 +49,7 @@ async function startCamera() {
 
 function startViewer() {
   role = "viewer";
+  remoteVideos.innerHTML = "";
 
   if (!roomId()) {
     alert("Enter a room code");
@@ -72,14 +76,23 @@ function makePeer(targetId, initiator) {
     }
   };
 
+  pc.onconnectionstatechange = () => {
+    console.log("Peer connection state:", targetId, pc.connectionState);
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    console.log("ICE state:", targetId, pc.iceConnectionState);
+  };
+
   if (role === "camera" && localStream) {
-    localStream.getTracks().forEach(track => {
+    localStream.getTracks().forEach((track) => {
       pc.addTrack(track, localStream);
     });
   }
 
   if (role === "viewer") {
     pc.ontrack = (event) => {
+      console.log("Got remote track from:", targetId);
       attachRemoteVideo(targetId, event.streams[0]);
     };
   }
