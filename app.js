@@ -1,33 +1,101 @@
 const socket = io();
 
+const homeScreen = document.getElementById("homeScreen");
+const roleScreen = document.getElementById("roleScreen");
+const liveScreen = document.getElementById("liveScreen");
+
 const roomIdInput = document.getElementById("roomId");
+const connectRoomBtn = document.getElementById("connectRoom");
+const changeRoomBtn = document.getElementById("changeRoom");
+const disconnectRoomBtn = document.getElementById("disconnectRoom");
+const retryPlaybackBtn = document.getElementById("retryPlayback");
+
+const connectedRoomLabel = document.getElementById("connectedRoomLabel");
+const liveRoomLabel = document.getElementById("liveRoomLabel");
+const statusMessage = document.getElementById("statusMessage");
+
 const startCameraBtn = document.getElementById("startCamera");
 const startViewerBtn = document.getElementById("startViewer");
 const localVideo = document.getElementById("localVideo");
 const remoteVideos = document.getElementById("remoteVideos");
 
+let currentRoomId = "";
 let role = null;
 let localStream = null;
 const peers = new Map();
 
-const rtcConfig = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" }
-  ]
-};
+function normalizeRoomId(value) {
+  return value.replace(/\D+/g, "");
+}
+
+function showScreen(screen) {
+  [homeScreen, roleScreen, liveScreen].forEach((item) => {
+    item.classList.toggle("active", item === screen);
+  });
+}
+
+function setStatus(message) {
+  statusMessage.textContent = message || "";
+}
 
 function roomId() {
-  return roomIdInput.value.trim();
+  return normalizeRoomId(roomIdInput.value.trim());
+}
+
+function clearPeersAndVideos() {
+  peers.forEach((pc) => pc.close());
+  peers.clear();
+  remoteVideos.innerHTML = "";
+}
+
+function stopLocalStream() {
+  if (localStream) {
+    localStream.getTracks().forEach((track) => track.stop());
+    localStream = null;
+  }
+  localVideo.srcObject = null;
+}
+
+function leaveRoom() {
+  socket.emit("leave-room");
+  clearPeersAndVideos();
+  stopLocalStream();
+  role = null;
+}
+
+function disconnectAndReturnToRoleScreen() {
+  leaveRoom();
+  showScreen(roleScreen);
+  setStatus("Disconnected from the room.");
+}
+
+function connectRoom() {
+  const enteredRoom = roomId();
+
+  if (!enteredRoom) {
+    alert("Enter a room number");
+    return;
+  }
+
+  currentRoomId = enteredRoom;
+  roomIdInput.value = currentRoomId;
+  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
+  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
+  setStatus("");
+  showScreen(roleScreen);
 }
 
 async function startCamera() {
   role = "camera";
 
-  if (!roomId()) {
-    alert("Enter a room code");
+  if (!currentRoomId) {
+    setStatus("Connect to a room first.");
+    showScreen(homeScreen);
     return;
   }
+
+  clearPeersAndVideos();
+  localVideo.style.display = "block";
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({
@@ -38,30 +106,39 @@ async function startCamera() {
     localVideo.srcObject = localStream;
 
     socket.emit("join-room", {
-      roomId: roomId(),
+      roomId: currentRoomId,
       role: "camera"
     });
+
+    showScreen(liveScreen);
+    setStatus("You are sharing this device as a camera.");
   } catch (err) {
     console.error(err);
     alert("Camera access denied or not working");
+    role = null;
   }
 }
 
 function startViewer() {
   role = "viewer";
 
-  if (!roomId()) {
-    alert("Enter a room code");
+  if (!currentRoomId) {
+    setStatus("Connect to a room first.");
+    showScreen(homeScreen);
     return;
   }
 
-  remoteVideos.innerHTML = "";
+  clearPeersAndVideos();
+  stopLocalStream();
   localVideo.style.display = "none";
 
   socket.emit("join-room", {
-    roomId: roomId(),
+    roomId: currentRoomId,
     role: "viewer"
   });
+
+  showScreen(liveScreen);
+  setStatus("Viewing cameras in this room.");
 }
 
 function makePeer(targetId, initiator) {
@@ -79,14 +156,6 @@ function makePeer(targetId, initiator) {
         data: { type: "candidate", candidate: event.candidate }
       });
     }
-  };
-
-  pc.onconnectionstatechange = () => {
-    console.log("connection state:", targetId, pc.connectionState);
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    console.log("ice state:", targetId, pc.iceConnectionState);
   };
 
   if (role === "camera" && localStream) {
@@ -132,13 +201,10 @@ function attachRemoteVideo(id, stream) {
     el.playsInline = true;
     el.muted = true;
     el.controls = true;
-    el.style.width = "100%";
-    el.style.marginTop = "12px";
     remoteVideos.appendChild(el);
   }
 
   el.srcObject = stream;
-
   el.play().catch((err) => {
     console.log("play blocked:", err);
   });
@@ -147,7 +213,7 @@ function attachRemoteVideo(id, stream) {
 socket.on("existing-cameras", (cameraIds) => {
   if (role !== "viewer") return;
 
-  cameraIds.forEach(id => {
+  cameraIds.forEach((id) => {
     if (!peers.has(id)) {
       makePeer(id, true);
     }
@@ -199,5 +265,31 @@ socket.on("camera-left", ({ id }) => {
   if (el) el.remove();
 });
 
+connectRoomBtn.addEventListener("click", connectRoom);
+roomIdInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    connectRoom();
+  }
+});
+
+changeRoomBtn.addEventListener("click", () => {
+  leaveRoom();
+  currentRoomId = "";
+  roomIdInput.value = "";
+  showScreen(homeScreen);
+  setStatus("");
+});
+
+disconnectRoomBtn.addEventListener("click", disconnectAndReturnToRoleScreen);
+retryPlaybackBtn.addEventListener("click", () => {
+  document.querySelectorAll("video").forEach((video) => {
+    video.play().catch(() => {});
+  });
+});
+
 startCameraBtn.addEventListener("click", startCamera);
 startViewerBtn.addEventListener("click", startViewer);
+
+roomIdInput.addEventListener("input", () => {
+  roomIdInput.value = normalizeRoomId(roomIdInput.value);
+});
