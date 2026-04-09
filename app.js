@@ -645,12 +645,16 @@ if (previous?.cameraName) {
   cameraNameInput.value = previous.cameraName;
 }
 document.getElementById("connectRoom").onclick = () => {
-  const roomId = document.getElementById("roomId").value;
+  const roomId = document.getElementById("roomId").value.trim();
+
+  console.log("connectRoom clicked");
+  console.log("roomId:", roomId);
+  console.log("socket connected:", socket.connected);
 
   if (!roomId) {
     alert("Enter a room number");
     return;
   }
 
-  window.location.href = `/?room=${roomId}`;
+  window.location.href = `/?room=${encodeURIComponent(roomId)}`;
 };
