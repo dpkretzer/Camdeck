@@ -65,7 +65,12 @@ function startViewer() {
 }
 
 function makePeer(targetId, initiator) {
-  const pc = new RTCPeerConnection(rtcConfig);
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" }
+    ]
+  });
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
@@ -77,11 +82,11 @@ function makePeer(targetId, initiator) {
   };
 
   pc.onconnectionstatechange = () => {
-    console.log("Peer connection state:", targetId, pc.connectionState);
+    console.log("connection state:", targetId, pc.connectionState);
   };
 
   pc.oniceconnectionstatechange = () => {
-    console.log("ICE state:", targetId, pc.iceConnectionState);
+    console.log("ice state:", targetId, pc.iceConnectionState);
   };
 
   if (role === "camera" && localStream) {
@@ -91,15 +96,12 @@ function makePeer(targetId, initiator) {
   }
 
   if (role === "viewer") {
-  pc.ontrack = (event) => {
-  const msg = document.createElement("p");
-  msg.style.color = "lime";
-  msg.innerText = "TRACK RECEIVED";
-  document.body.appendChild(msg);
+    pc.addTransceiver("video", { direction: "recvonly" });
 
-  attachRemoteVideo(targetId, event.streams[0]);
-};
-}
+    pc.ontrack = (event) => {
+      attachRemoteVideo(targetId, event.streams[0]);
+    };
+  }
 
   peers.set(targetId, pc);
 
