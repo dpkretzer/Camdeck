@@ -8,20 +8,43 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Camdeck</h1>
+    <header class="titleBlock">
+      <p class="eyebrow">Secure camera network</p>
+      <h1>Camdeck</h1>
+    </header>
 
-    <input id="roomId" placeholder="Room code" />
-    <div class="buttons">
-      <button id="startCamera">Use this tablet as camera</button>
-      <button id="startViewer">View cameras</button>
+    <section id="homeScreen" class="screen panel panel1 active">
+      <p class="panelTitle paneltitle">Access Gateway</p>
+      <p class="panelText paneltext">Enter your secure room number to continue.</p>
+      <input id="roomId" placeholder="Room number" inputmode="numeric" pattern="[0-9]*" />
+      <button id="connectRoom">Authorize & Connect</button>
+    </section>
+
+    <section id="roleScreen" class="screen panel panel1">
+      <p class="panelTitle paneltitle">Connection Established</p>
+      <p id="connectedRoomLabel"></p>
+      <div class="buttons">
+        <button id="startCamera">Deploy as camera</button>
+        <button id="startViewer">View camera feeds</button>
+      </div>
+      <button id="changeRoom" class="secondary">Change room</button>
+    </section>
+
+    <div id="statusMessage" class="status"></div>
+
+    <div id="liveScreen" class="screen panel panel1">
+      <div class="liveHeader">
+        <p id="liveRoomLabel"></p>
+        <button id="disconnectRoom" class="secondary">Disconnect</button>
+      </div>
+
+      <video id="localVideo" autoplay playsinline muted></video>
+      <div id="remoteVideos"></div>
+
+      <button id="retryPlayback" class="secondary">
+        Tap if video doesn't play
+      </button>
     </div>
-
-    <video id="localVideo" autoplay playsinline muted></video>
-    <div id="remoteVideos"></div>
-
-<button onclick="document.querySelectorAll('video').forEach(v => v.play())">
-  Tap if video doesn't play
-</button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
