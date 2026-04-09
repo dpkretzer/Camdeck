@@ -18,6 +18,10 @@
 
     <video id="localVideo" autoplay playsinline muted></video>
     <div id="remoteVideos"></div>
+
+<button onclick="document.querySelectorAll('video').forEach(v => v.play())">
+  Tap if video doesn't play
+</button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
