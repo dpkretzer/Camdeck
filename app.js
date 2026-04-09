@@ -49,13 +49,13 @@ async function startCamera() {
 
 function startViewer() {
   role = "viewer";
-  remoteVideos.innerHTML = "";
 
   if (!roomId()) {
     alert("Enter a room code");
     return;
   }
 
+  remoteVideos.innerHTML = "";
   localVideo.style.display = "none";
 
   socket.emit("join-room", {
