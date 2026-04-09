@@ -24,10 +24,6 @@ let role = null;
 let localStream = null;
 const peers = new Map();
 
-function normalizeRoomId(value) {
-  return value.replace(/\D+/g, "");
-}
-
 function showScreen(screen) {
   [homeScreen, roleScreen, liveScreen].forEach((item) => {
     item.classList.toggle("active", item === screen);
@@ -79,6 +75,48 @@ function connectRoom() {
 
   currentRoomId = enteredRoom;
   roomIdInput.value = currentRoomId;
+  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
+  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
+  setStatus("");
+  showScreen(roleScreen);
+}
+
+function clearPeersAndVideos() {
+  peers.forEach((pc) => pc.close());
+  peers.clear();
+  remoteVideos.innerHTML = "";
+}
+
+function stopLocalStream() {
+  if (localStream) {
+    localStream.getTracks().forEach((track) => track.stop());
+    localStream = null;
+  }
+  localVideo.srcObject = null;
+}
+
+function leaveRoom() {
+  socket.emit("leave-room");
+  clearPeersAndVideos();
+  stopLocalStream();
+  role = null;
+}
+
+function disconnectAndReturnToRoleScreen() {
+  leaveRoom();
+  showScreen(roleScreen);
+  setStatus("Disconnected from the room.");
+}
+
+function connectRoom() {
+  const enteredRoom = roomId();
+
+  if (!enteredRoom) {
+    alert("Enter a room number");
+    return;
+  }
+
+  currentRoomId = enteredRoom;
   connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
   liveRoomLabel.textContent = `Room: ${currentRoomId}`;
   setStatus("");
@@ -274,8 +312,6 @@ roomIdInput.addEventListener("keydown", (event) => {
 
 changeRoomBtn.addEventListener("click", () => {
   leaveRoom();
-  currentRoomId = "";
-  roomIdInput.value = "";
   showScreen(homeScreen);
   setStatus("");
 });
@@ -289,7 +325,3 @@ retryPlaybackBtn.addEventListener("click", () => {
 
 startCameraBtn.addEventListener("click", startCamera);
 startViewerBtn.addEventListener("click", startViewer);
-
-roomIdInput.addEventListener("input", () => {
-  roomIdInput.value = normalizeRoomId(roomIdInput.value);
-});

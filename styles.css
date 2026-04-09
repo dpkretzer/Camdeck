@@ -15,54 +15,12 @@ body {
   margin: 0 auto;
 }
 
-.titleBlock {
-  margin-bottom: 18px;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: #82d8ff;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-size: 0.72rem;
-}
-
-h1 {
-  margin: 0;
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 18px rgba(52, 173, 255, 0.42);
-}
-
 .screen {
   display: none;
 }
 
 .screen.active {
   display: block;
-}
-
-.panel,
-.panel1 {
-  border: 1px solid rgba(87, 176, 255, 0.34);
-  background: linear-gradient(180deg, rgba(13, 24, 45, 0.94), rgba(9, 17, 33, 0.92));
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: 0 0 0 1px rgba(138, 222, 255, 0.12), 0 12px 32px rgba(0, 0, 0, 0.45);
-}
-
-.panelTitle,
-.paneltitle {
-  margin: 0;
-  color: #7ad9ff;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.82rem;
-}
-
-.panelText,
-.paneltext {
-  color: #d0e7ff;
 }
 
 input, button {
@@ -106,15 +64,13 @@ video {
 }
 
 .secondary {
-  background: rgba(17, 35, 58, 0.9);
+  background: #333;
   color: #f4f4f4;
 }
 
 .status {
   min-height: 24px;
-  color: #8ae8ff;
-  margin: 8px 0;
-  text-shadow: 0 0 10px rgba(38, 173, 255, 0.45);
+  color: #c8f7ff;
 }
 
 .liveHeader {
@@ -123,18 +79,4 @@ video {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-button {
-  cursor: pointer;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-button:not(.secondary) {
-  background: linear-gradient(120deg, rgba(0, 159, 255, 0.35), rgba(0, 231, 255, 0.22));
-}
-
-button:hover {
-  border-color: rgba(148, 231, 255, 0.95);
 }
