@@ -21,13 +21,7 @@ const rooms = new Map();
 
 function getRoom(roomId) {
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, {
-      cameras: new Set(),
-      viewers: new Set(),
-      cameraNames: new Map(),
-      subscribers: new Map(),
-      lastMovementAtByCamera: new Map()
-    });
+    rooms.set(roomId, { cameras: new Set(), viewers: new Set(), cameraNames: new Map() });
   }
   return rooms.get(roomId);
 }
@@ -151,7 +145,7 @@ function removeSocketFromRoom(socket) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join-room", ({ roomId, role, name, notificationIdentity }, callback = () => {}) => {
+  socket.on("join-room", ({ roomId, role, name }, callback = () => {}) => {
     if (!roomId || !role) {
       callback({ ok: false, error: "Missing room or role" });
       return;
@@ -182,11 +176,6 @@ io.on("connection", (socket) => {
 
     if (role === "viewer") {
       room.viewers.add(socket.id);
-      if (notificationIdentity && notificationIdentity.value) {
-        const contact = String(notificationIdentity.value).trim().slice(0, 128);
-        const type = notificationIdentity.type === "phone" ? "phone" : "email";
-        room.subscribers.set(socket.id, { type, contact });
-      }
       socket.emit(
         "existing-cameras",
         [...room.cameras].map((id) => ({ id, name: room.cameraNames.get(id) || "Camera feed" }))

@@ -17,7 +17,6 @@ const retryPlaybackBtn = document.getElementById("retryPlayback");
 const rejoinLastBtn = document.getElementById("rejoinLast");
 const toggleLayoutBtn = document.getElementById("toggleLayout");
 const toggleMotionFollowBtn = document.getElementById("toggleMotionFollow");
-const sendTestAlertBtn = document.getElementById("sendTestAlert");
 
 const connectedRoomLabel = document.getElementById("connectedRoomLabel");
 const liveRoomLabel = document.getElementById("liveRoomLabel");
@@ -40,8 +39,6 @@ const peers = new Map();
 const cameraNames = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
-const lastMotionEmitAt = new Map();
-let notificationIdentity = null;
 
 function normalizeRoomId(value) {
   return value.replace(/\D+/g, "");
@@ -69,31 +66,6 @@ function roomId() {
 
 function cameraName() {
   return cameraNameInput.value.trim().slice(0, 24);
-}
-
-function validateNotificationIdentity(type, value) {
-  const normalized = value.trim();
-  if (type === "email") {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
-  }
-
-  return /^\+?[0-9][0-9\s\-()]{7,20}$/.test(normalized);
-}
-
-function saveNotificationIdentity(type, value) {
-  notificationIdentity = { type, value: value.trim() };
-  localStorage.setItem("camdeck-notify-identity", JSON.stringify(notificationIdentity));
-  signedInLabel.textContent = `Signed in for movement alerts via ${type}: ${notificationIdentity.value}`;
-}
-
-function loadNotificationIdentity() {
-  try {
-    const raw = localStorage.getItem("camdeck-notify-identity");
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }
 
 function saveSession(nextRole = role) {
@@ -181,8 +153,7 @@ function joinRoomWithRole(roleName) {
       {
         roomId: currentRoomId,
         role: roleName,
-        name: roleName === "camera" ? cameraName() : "",
-        notificationIdentity: roleName === "viewer" ? notificationIdentity : null
+        name: roleName === "camera" ? cameraName() : ""
       },
       (response) => {
         if (!response || !response.ok) {
@@ -203,7 +174,6 @@ function clearPeersAndVideos() {
   motionWatchers.forEach(({ intervalId }) => clearInterval(intervalId));
   motionWatchers.clear();
   lastMotionLogAt.clear();
-  lastMotionEmitAt.clear();
   remoteVideos.innerHTML = "";
   sessionTimeline.innerHTML = "";
   updateEmptyState();
@@ -265,15 +235,6 @@ function detectMotionOnVideo(id, videoEl) {
     if (now - lastLogged > 8000) {
       addTimelineEvent(`Motion detected on ${cameraNames.get(id) || "camera feed"}.`);
       lastMotionLogAt.set(id, now);
-    }
-
-    const lastEmitted = lastMotionEmitAt.get(id) || 0;
-    if (now - lastEmitted > 8000) {
-      socket.emit("motion-event", {
-        cameraId: id,
-        cameraName: cameraNames.get(id) || "Camera feed"
-      });
-      lastMotionEmitAt.set(id, now);
     }
 
     if (motionFollowEnabled) {
@@ -589,7 +550,6 @@ socket.on("camera-left", ({ id }) => {
     motionWatchers.delete(id);
   }
   lastMotionLogAt.delete(id);
-  lastMotionEmitAt.delete(id);
   const card = document.getElementById(`card-${id}`);
   if (card) card.remove();
   addTimelineEvent("A camera disconnected.");
@@ -606,34 +566,6 @@ socket.on("disconnect", () => {
     setStatus("Connection lost. Reconnecting…");
     addTimelineEvent("Socket disconnected. Reconnecting…");
   }
-});
-
-socket.on("movement-alert", async ({ cameraName, contact, at }) => {
-  const detectedAt = at ? new Date(at) : new Date();
-  const message = `Movement detected on ${cameraName || "camera feed"} (${detectedAt.toLocaleTimeString()}).`;
-  setStatus(message);
-  addTimelineEvent(`Notification sent to ${contact || "signed-in viewers"} for ${cameraName || "camera feed"}.`);
-
-  if ("Notification" in window) {
-    if (Notification.permission === "default") {
-      await Notification.requestPermission();
-    }
-
-    if (Notification.permission === "granted") {
-      new Notification("Camdeck movement alert", { body: message });
-    }
-  }
-});
-
-socket.on("notification-delivery", ({ channel, status, error, detail }) => {
-  if (status === "accepted") {
-    addTimelineEvent(`${channel.toUpperCase()} alert accepted. ${detail || ""}`.trim());
-    return;
-  }
-
-  const reason = error || "Unknown delivery failure";
-  addTimelineEvent(`${channel.toUpperCase()} alert failed: ${reason}`);
-  setStatus(`${channel.toUpperCase()} delivery failed: ${reason}`);
 });
 
 connectRoomBtn.addEventListener("click", connectRoom);
@@ -674,11 +606,6 @@ toggleMotionFollowBtn.addEventListener("click", () => {
   addTimelineEvent(`Motion follow ${motionFollowEnabled ? "enabled" : "disabled"}.`);
 });
 
-sendTestAlertBtn.addEventListener("click", () => {
-  socket.emit("send-test-alert");
-  addTimelineEvent("Requested test alert delivery.");
-});
-
 rejoinLastBtn.addEventListener("click", async () => {
   const previous = loadSession();
   if (!previous?.roomId) {
@@ -701,18 +628,6 @@ rejoinLastBtn.addEventListener("click", async () => {
   }
 });
 
-signInNotifyBtn.addEventListener("click", () => {
-  const type = notifyTypeInput.value;
-  const value = notifyContactInput.value.trim();
-  if (!validateNotificationIdentity(type, value)) {
-    setStatus(type === "email" ? "Enter a valid email address." : "Enter a valid phone number.");
-    return;
-  }
-
-  saveNotificationIdentity(type, value);
-  setStatus("Notification sign-in saved.");
-});
-
 roomIdInput.addEventListener("input", () => {
   roomIdInput.value = normalizeRoomId(roomIdInput.value);
 });
@@ -727,11 +642,4 @@ if (previous?.roomId) {
 }
 if (previous?.cameraName) {
   cameraNameInput.value = previous.cameraName;
-}
-
-const savedIdentity = loadNotificationIdentity();
-if (savedIdentity?.type && savedIdentity?.value) {
-  notifyTypeInput.value = savedIdentity.type;
-  notifyContactInput.value = savedIdentity.value;
-  saveNotificationIdentity(savedIdentity.type, savedIdentity.value);
 }
