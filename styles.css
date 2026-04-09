@@ -1,21 +1,87 @@
 body {
-  font-family: Arial, sans-serif;
-  background: #111;
-  color: white;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.15), transparent 35%),
+    radial-gradient(circle at 80% 10%, rgba(0, 153, 255, 0.22), transparent 40%),
+    linear-gradient(160deg, #040b16, #02060c 45%, #07111f);
+  color: #e7f6ff;
   margin: 0;
-  padding: 20px;
+  min-height: 100vh;
+  padding: 24px;
 }
 
 .wrap {
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
+}
+
+.titleBlock {
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #82d8ff;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+h1 {
+  margin: 0;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 18px rgba(52, 173, 255, 0.42);
+}
+
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+}
+
+.panel,
+.panel1 {
+  border: 1px solid rgba(87, 176, 255, 0.34);
+  background: linear-gradient(180deg, rgba(13, 24, 45, 0.94), rgba(9, 17, 33, 0.92));
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 0 0 1px rgba(138, 222, 255, 0.12), 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.panelTitle,
+.paneltitle {
+  margin: 0;
+  color: #7ad9ff;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.82rem;
+}
+
+.panelText,
+.paneltext {
+  color: #d0e7ff;
 }
 
 input, button {
   padding: 12px;
-  margin: 8px 0;
+  margin: 8px 0 10px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid rgba(126, 201, 255, 0.34);
+  background: rgba(4, 11, 22, 0.85);
+  color: #e8f7ff;
+}
+
+input {
+  width: min(420px, 100%);
+  outline: none;
+}
+
+input:focus {
+  border-color: rgba(117, 221, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(117, 221, 255, 0.2);
 }
 
 .buttons {
@@ -26,14 +92,49 @@ input, button {
 
 video {
   width: 100%;
-  max-width: 500px;
+  max-width: 560px;
   margin-top: 20px;
   background: black;
   border-radius: 12px;
+  border: 1px solid rgba(139, 225, 255, 0.24);
 }
 
 #remoteVideos {
   display: grid;
   gap: 16px;
   margin-top: 20px;
+}
+
+.secondary {
+  background: rgba(17, 35, 58, 0.9);
+  color: #f4f4f4;
+}
+
+.status {
+  min-height: 24px;
+  color: #8ae8ff;
+  margin: 8px 0;
+  text-shadow: 0 0 10px rgba(38, 173, 255, 0.45);
+}
+
+.liveHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+button:not(.secondary) {
+  background: linear-gradient(120deg, rgba(0, 159, 255, 0.35), rgba(0, 231, 255, 0.22));
+}
+
+button:hover {
+  border-color: rgba(148, 231, 255, 0.95);
 }
