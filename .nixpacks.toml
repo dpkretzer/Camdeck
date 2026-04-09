@@ -1,0 +1,10 @@
+TOML
+
+[phases.setup]
+nixPkgs = ["nodejs"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[start]
+cmd = "npm start"
