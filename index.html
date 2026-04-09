@@ -10,18 +10,36 @@
   <div class="wrap">
     <h1>Camdeck</h1>
 
-    <input id="roomId" placeholder="Room code" />
-    <div class="buttons">
-      <button id="startCamera">Use this tablet as camera</button>
-      <button id="startViewer">View cameras</button>
+    <section id="homeScreen" class="screen active">
+      <p>Enter a room number to continue.</p>
+      <input id="roomId" placeholder="Room number" inputmode="numeric" />
+      <button id="connectRoom">Connect to room</button>
+    </section>
+
+    <section id="roleScreen" class="screen">
+      <p id="connectedRoomLabel"></p>
+      <div class="buttons">
+        <button id="startCamera">Use this tablet as camera</button>
+        <button id="startViewer">View cameras</button>
+      </div>
+      <button id="changeRoom" class="secondary">Change room</button>
+    </section>
+
+    <div id="statusMessage" class="status"></div>
+
+    <div id="liveScreen" class="screen">
+      <div class="liveHeader">
+        <p id="liveRoomLabel"></p>
+        <button id="disconnectRoom" class="secondary">Disconnect</button>
+      </div>
+
+      <video id="localVideo" autoplay playsinline muted></video>
+      <div id="remoteVideos"></div>
+
+      <button id="retryPlayback" class="secondary">
+        Tap if video doesn't play
+      </button>
     </div>
-
-    <video id="localVideo" autoplay playsinline muted></video>
-    <div id="remoteVideos"></div>
-
-<button onclick="document.querySelectorAll('video').forEach(v => v.play())">
-  Tap if video doesn't play
-</button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>

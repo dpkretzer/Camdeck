@@ -11,6 +11,14 @@ body {
   margin: 0 auto;
 }
 
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+}
+
 input, button {
   padding: 12px;
   margin: 8px 0;
@@ -36,4 +44,22 @@ video {
   display: grid;
   gap: 16px;
   margin-top: 20px;
+}
+
+.secondary {
+  background: #333;
+  color: #f4f4f4;
+}
+
+.status {
+  min-height: 24px;
+  color: #c8f7ff;
+}
+
+.liveHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
