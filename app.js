@@ -91,11 +91,11 @@ function makePeer(targetId, initiator) {
   }
 
   if (role === "viewer") {
-    pc.ontrack = (event) => {
-      console.log("Got remote track from:", targetId);
-      attachRemoteVideo(targetId, event.streams[0]);
-    };
-  }
+  pc.ontrack = (event) => {
+    console.log("TRACK RECEIVED", event);
+    attachRemoteVideo(targetId, event.streams[0]);
+  };
+}
 
   peers.set(targetId, pc);
 
