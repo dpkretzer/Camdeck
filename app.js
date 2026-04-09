@@ -4,10 +4,6 @@ const homeScreen = document.getElementById("homeScreen");
 const roleScreen = document.getElementById("roleScreen");
 const liveScreen = document.getElementById("liveScreen");
 
-const notifyTypeInput = document.getElementById("notifyType");
-const notifyContactInput = document.getElementById("notifyContact");
-const signInNotifyBtn = document.getElementById("signInNotify");
-const signedInLabel = document.getElementById("signedInLabel");
 const roomIdInput = document.getElementById("roomId");
 const cameraNameInput = document.getElementById("cameraName");
 const connectRoomBtn = document.getElementById("connectRoom");
