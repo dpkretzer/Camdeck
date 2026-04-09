@@ -3,6 +3,7 @@
 ## SMS movement notifications (Twilio)
 
 If viewers sign in with a **phone number**, Camdeck can send SMS alerts when movement is detected.
+You can also use the in-app **Send test alert** button after joining as a viewer to validate delivery.
 
 Set the following environment variables before starting the server:
 
@@ -22,6 +23,7 @@ npm start
 ## Email movement notifications (SendGrid)
 
 If viewers sign in with an **email address**, Camdeck can send email alerts when movement is detected.
+You can use the same in-app **Send test alert** button to verify email delivery.
 
 Set these environment variables:
 

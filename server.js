@@ -69,7 +69,8 @@ async function sendMovementSms(to, roomId, cameraName) {
     throw new Error(`Twilio API ${response.status}: ${responseText}`);
   }
 
-  return true;
+  const payloadJson = await response.json();
+  return payloadJson.sid || true;
 }
 
 function normalizeEmail(value) {
@@ -216,9 +217,18 @@ io.on("connection", (socket) => {
       });
 
       if (type === "phone") {
-        sendMovementSms(contact, roomId, cameraName || room.cameraNames.get(key) || "Camera feed").catch((err) => {
-          console.error("Failed to send movement SMS:", err.message);
-        });
+        sendMovementSms(contact, roomId, cameraName || room.cameraNames.get(key) || "Camera feed")
+          .then(() => {
+            io.to(viewerSocketId).emit("notification-delivery", { channel: "sms", status: "sent" });
+          })
+          .catch((err) => {
+            console.error("Failed to send movement SMS:", err.message);
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "sms",
+              status: "failed",
+              error: err.message
+            });
+          });
       }
 
       if (type === "email") {
@@ -227,9 +237,62 @@ io.on("connection", (socket) => {
           roomId,
           cameraName || room.cameraNames.get(key) || "Camera feed",
           occurredAt
-        ).catch((err) => {
-          console.error("Failed to send movement email:", err.message);
-        });
+        )
+          .then(() => {
+            io.to(viewerSocketId).emit("notification-delivery", { channel: "email", status: "sent" });
+          })
+          .catch((err) => {
+            console.error("Failed to send movement email:", err.message);
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "email",
+              status: "failed",
+              error: err.message
+            });
+          });
+      }
+    });
+  });
+
+  socket.on("send-test-alert", () => {
+    const roomId = socket.data?.roomId;
+    if (!roomId || !rooms.has(roomId)) return;
+    const room = rooms.get(roomId);
+    const occurredAt = new Date().toISOString();
+
+    room.subscribers.forEach(({ contact, type }, viewerSocketId) => {
+      io.to(viewerSocketId).emit("movement-alert", {
+        cameraId: "test",
+        cameraName: "Test alert",
+        contact,
+        at: occurredAt
+      });
+
+      if (type === "phone") {
+        sendMovementSms(contact, roomId, "Test alert")
+          .then(() => {
+            io.to(viewerSocketId).emit("notification-delivery", { channel: "sms", status: "sent" });
+          })
+          .catch((err) => {
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "sms",
+              status: "failed",
+              error: err.message
+            });
+          });
+      }
+
+      if (type === "email") {
+        sendMovementEmail(contact, roomId, "Test alert", occurredAt)
+          .then(() => {
+            io.to(viewerSocketId).emit("notification-delivery", { channel: "email", status: "sent" });
+          })
+          .catch((err) => {
+            io.to(viewerSocketId).emit("notification-delivery", {
+              channel: "email",
+              status: "failed",
+              error: err.message
+            });
+          });
       }
     });
   });

@@ -17,6 +17,7 @@ const retryPlaybackBtn = document.getElementById("retryPlayback");
 const rejoinLastBtn = document.getElementById("rejoinLast");
 const toggleLayoutBtn = document.getElementById("toggleLayout");
 const toggleMotionFollowBtn = document.getElementById("toggleMotionFollow");
+const sendTestAlertBtn = document.getElementById("sendTestAlert");
 
 const connectedRoomLabel = document.getElementById("connectedRoomLabel");
 const liveRoomLabel = document.getElementById("liveRoomLabel");
@@ -244,11 +245,11 @@ function detectMotionOnVideo(id, videoEl) {
         Math.abs(frame[i] - previousFrame[i]) +
         Math.abs(frame[i + 1] - previousFrame[i + 1]) +
         Math.abs(frame[i + 2] - previousFrame[i + 2]);
-      if (diff > 40) changed += 1;
+      if (diff > 25) changed += 1;
     }
 
     previousFrame = new Uint8ClampedArray(frame);
-    const motionDetected = changed > 120;
+    const motionDetected = changed > 60;
     const card = document.getElementById(`card-${id}`);
     const status = document.getElementById(`feed-status-${id}`);
     if (!card || !status) return;
@@ -624,6 +625,17 @@ socket.on("movement-alert", async ({ cameraName, contact, at }) => {
   }
 });
 
+socket.on("notification-delivery", ({ channel, status, error }) => {
+  if (status === "sent") {
+    addTimelineEvent(`${channel.toUpperCase()} alert sent successfully.`);
+    return;
+  }
+
+  const reason = error || "Unknown delivery failure";
+  addTimelineEvent(`${channel.toUpperCase()} alert failed: ${reason}`);
+  setStatus(`${channel.toUpperCase()} delivery failed: ${reason}`);
+});
+
 connectRoomBtn.addEventListener("click", connectRoom);
 roomIdInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -660,6 +672,11 @@ toggleMotionFollowBtn.addEventListener("click", () => {
   motionFollowEnabled = !motionFollowEnabled;
   applyMotionFollowButton();
   addTimelineEvent(`Motion follow ${motionFollowEnabled ? "enabled" : "disabled"}.`);
+});
+
+sendTestAlertBtn.addEventListener("click", () => {
+  socket.emit("send-test-alert");
+  addTimelineEvent("Requested test alert delivery.");
 });
 
 rejoinLastBtn.addEventListener("click", async () => {
