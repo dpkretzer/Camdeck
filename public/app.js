@@ -392,6 +392,11 @@ function detectMotionOnVideo(id, videoEl) {
 }
 
 function attachRemoteVideo(id, stream) {
+  console.log("[WebRTC] Attaching remote stream", {
+    id,
+    streamId: stream.id,
+    tracks: stream.getTracks().map((track) => `${track.kind}:${track.readyState}`)
+  });
   const card = buildParticipantTile(id, cameraNames.get(id) || "Camera feed", false);
   const video = card.querySelector("video");
   if (!video) return;
@@ -505,6 +510,7 @@ function localMediaConstraints() {
 
 async function startCamera() {
   role = "camera";
+  console.log("[WebRTC] startCamera() called", { roomId: currentRoomId });
 
   if (!currentRoomId) {
     setStatus("Connect to a room first.");
@@ -516,10 +522,16 @@ async function startCamera() {
 
   try {
     await ensureSocketConnected();
+    console.log("[WebRTC] Socket connected for camera");
     localStream = await navigator.mediaDevices.getUserMedia(localMediaConstraints());
+    console.log("[WebRTC] Local stream ready (camera)", {
+      audioTracks: localStream.getAudioTracks().length,
+      videoTracks: localStream.getVideoTracks().length
+    });
 
     mountLocalTile(localStream, cameraName() || "You (camera)");
     await joinRoomWithRole("camera");
+    console.log("[WebRTC] Camera joined room", { roomId: currentRoomId });
 
     saveSession("camera");
     showScreen(liveScreen);
@@ -539,6 +551,7 @@ async function startCamera() {
 
 async function startViewer() {
   role = "viewer";
+  console.log("[WebRTC] startViewer() called", { roomId: currentRoomId });
 
   if (!currentRoomId) {
     setStatus("Connect to a room first.");
@@ -551,7 +564,9 @@ async function startViewer() {
 
   try {
     await ensureSocketConnected();
+    console.log("[WebRTC] Socket connected for viewer");
     await joinRoomWithRole("viewer");
+    console.log("[WebRTC] Viewer joined room", { roomId: currentRoomId });
     saveSession("viewer");
     showScreen(liveScreen);
     setStatus("Viewing cameras in this room.");
@@ -567,6 +582,7 @@ async function startViewer() {
 }
 
 function makePeer(targetId, initiator) {
+  console.log("[WebRTC] Creating peer", { targetId, initiator, role });
   const pc = new RTCPeerConnection({
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
@@ -576,6 +592,7 @@ function makePeer(targetId, initiator) {
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
+      console.log("[WebRTC] Sending ICE candidate", { targetId });
       socket.emit("signal", {
         target: targetId,
         data: { type: "candidate", candidate: event.candidate }
@@ -585,17 +602,33 @@ function makePeer(targetId, initiator) {
 
   pc.ontrack = (event) => {
     const [stream] = event.streams;
+    console.log("[WebRTC] ontrack", {
+      targetId,
+      streamId: stream?.id || null,
+      trackKinds: stream ? stream.getTracks().map((track) => track.kind) : []
+    });
     if (stream) attachRemoteVideo(targetId, stream);
   };
 
   if (role === "camera" && localStream) {
+    console.log("[WebRTC] Adding local tracks", {
+      targetId,
+      tracks: localStream.getTracks().map((track) => `${track.kind}:${track.readyState}`)
+    });
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+  } else {
+    // Viewer initiates without local tracks; add recvonly transceivers so offer includes media m-lines.
+    pc.addTransceiver("video", { direction: "recvonly" });
+    pc.addTransceiver("audio", { direction: "recvonly" });
+    console.log("[WebRTC] Added recvonly transceivers", { targetId });
   }
 
   if (initiator) {
+    console.log("[WebRTC] Creating offer", { targetId });
     pc.createOffer()
       .then((offer) => pc.setLocalDescription(offer))
       .then(() => {
+        console.log("[WebRTC] Sending offer", { targetId });
         socket.emit("signal", {
           target: targetId,
           data: { type: "offer", sdp: pc.localDescription }
@@ -641,6 +674,7 @@ function toggleCamera() {
 
 socket.on("existing-cameras", (cameras) => {
   if (role !== "viewer") return;
+  console.log("[WebRTC] existing-cameras", { count: cameras.length, cameras });
 
   cameras.forEach(({ id, name }) => {
     cameraNames.set(id, name || "Camera feed");
@@ -651,6 +685,7 @@ socket.on("existing-cameras", (cameras) => {
 
 socket.on("camera-joined", ({ id, name }) => {
   if (role !== "viewer") return;
+  console.log("[WebRTC] camera-joined", { id, name });
   cameraNames.set(id, name || "Camera feed");
   addTimelineEvent(`${cameraNames.get(id)} joined.`);
 
@@ -658,22 +693,27 @@ socket.on("camera-joined", ({ id, name }) => {
 });
 
 socket.on("signal", async ({ from, data }) => {
+  console.log("[WebRTC] signal received", { from, type: data?.type });
   let pc = peers.get(from);
   if (!pc) pc = makePeer(from, false);
 
   try {
     if (data.type === "offer") {
+      console.log("[WebRTC] Processing offer", { from });
       await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
+      console.log("[WebRTC] Sending answer", { from });
       socket.emit("signal", {
         target: from,
         data: { type: "answer", sdp: pc.localDescription }
       });
     } else if (data.type === "answer") {
+      console.log("[WebRTC] Processing answer", { from });
       await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
     } else if (data.type === "candidate") {
+      console.log("[WebRTC] Processing candidate", { from });
       await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
     }
   } catch (err) {
@@ -702,8 +742,32 @@ socket.on("camera-left", ({ id }) => {
   updateEmptyState();
 });
 
+async function restoreSessionAfterReconnect() {
+  if (!role || !currentRoomId) return;
+
+  clearPeersAndVideos();
+
+  try {
+    await joinRoomWithRole(role);
+    if (role === "camera" && localStream) {
+      mountLocalTile(localStream, cameraName() || "You (camera)");
+      addTimelineEvent("Reconnected and resumed camera broadcast.");
+    } else if (role === "viewer") {
+      updateEmptyState();
+      addTimelineEvent("Reconnected and reloading camera feeds.");
+    }
+    setStatus(role === "camera" ? "Camera reconnected." : "Viewer reconnected.");
+  } catch (err) {
+    console.error("Reconnect join failed:", err);
+    setStatus("Reconnection failed. Please disconnect and reconnect.");
+  }
+}
+
 socket.on("connect", () => {
   setConnectionBadge(true);
+  if (role && currentRoomId) {
+    restoreSessionAfterReconnect();
+  }
 });
 
 socket.on("disconnect", () => {
