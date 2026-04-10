@@ -37,7 +37,11 @@ const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
 function normalizeRoomId(value) {
-  return value.trim();
+  return value.trim().toUpperCase();
+}
+
+function validateRoomId(nextRoomId) {
+  return /^[A-Z0-9_-]{3,24}$/.test(nextRoomId);
 }
 
 function showScreen(screen) {
@@ -274,7 +278,12 @@ function connectRoom() {
   const enteredRoom = roomId();
 
   if (!enteredRoom) {
-    alert("Enter a room number");
+    alert("Enter your room key.");
+    return;
+  }
+
+  if (!validateRoomId(enteredRoom)) {
+    alert("Room key must be 3-24 characters (letters, numbers, - or _).");
     return;
   }
 
@@ -367,11 +376,37 @@ function makePeer(targetId, initiator) {
         data: { type: "candidate", candidate: event.candidate }
       });
     }
-});
+  };
 
-function validateRoomId(roomId) {
-    // Validate the room ID (this is just a placeholder, implement your validation logic)
-    return roomId && roomId.length > 0;
+  pc.ontrack = (event) => {
+    const [stream] = event.streams;
+    if (stream) {
+      attachRemoteVideo(targetId, stream);
+    }
+  };
+
+  if (role === "camera" && localStream) {
+    localStream.getTracks().forEach((track) => {
+      pc.addTrack(track, localStream);
+    });
+  }
+
+  if (initiator) {
+    pc.createOffer()
+      .then((offer) => pc.setLocalDescription(offer))
+      .then(() => {
+        socket.emit("signal", {
+          target: targetId,
+          data: { type: "offer", sdp: pc.localDescription }
+        });
+      })
+      .catch((err) => {
+        console.error("Offer error:", err);
+      });
+  }
+
+  peers.set(targetId, pc);
+  return pc;
 }
 
 function attachRemoteVideo(id, stream) {
