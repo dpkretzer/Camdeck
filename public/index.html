@@ -4,60 +4,73 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KoziKamera Security</title>
-  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
-<body>
-  <div class="wrap">
-    <header class="titleBlock">
-      <p class="eyebrow">Secure camera network</p>
-      <h1>KoziKamera Security</h1>
-    </header>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+  <main class="mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center p-4 sm:p-6 lg:p-8">
+    <div class="w-full rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-6 lg:p-8">
+      <header class="mb-6 border-b border-white/10 pb-4">
+        <p class="text-xs uppercase tracking-[0.2em] text-cyan-300/80">Secure camera network</p>
+        <h1 class="mt-2 text-2xl font-semibold text-white sm:text-3xl">KoziKamera Security</h1>
+      </header>
 
-    <section id="homeScreen" class="screen panel panel1 active">
-      <p class="panelTitle paneltitle">Access Gateway</p>
-      <p class="panelText paneltext">Enter your secure room key to continue.</p>
-      <input id="roomId" placeholder="Room key" inputmode="text" />
-      <input id="cameraName" placeholder="Camera name (optional)" maxlength="24" />
-      <button id="connectRoom">Authorize & Connect</button>
-      <button id="rejoinLast" class="secondary">Rejoin last session</button>
-    </section>
-
-    <section id="roleScreen" class="screen panel panel1">
-      <p class="panelTitle paneltitle">Connection Established</p>
-      <p id="connectedRoomLabel"></p>
-      <div class="buttons">
-        <button id="startCamera">Deploy as camera</button>
-        <button id="startViewer">View camera feeds</button>
-      </div>
-      <button id="changeRoom" class="secondary">Change room</button>
-    </section>
-
-    <div id="statusMessage" class="status"></div>
-    <div id="connectionBadge" class="connectionBadge">Connecting…</div>
-
-    <div id="liveScreen" class="screen panel panel1">
-      <div class="liveHeader">
-        <p id="liveRoomLabel"></p>
-        <div class="liveHeaderControls">
-          <button id="toggleMotionFollow" class="secondary">Motion follow: Off</button>
-          <button id="toggleLayout" class="secondary">Focus layout</button>
-          <button id="disconnectRoom" class="secondary">Disconnect</button>
+      <section id="homeScreen" class="screen active rounded-2xl border border-white/10 bg-slate-900/70 p-4 sm:p-5">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.15em] text-cyan-200">Access Gateway</h2>
+        <p class="mt-2 text-sm text-slate-300">Enter your secure room key to continue.</p>
+        <div class="mt-4 grid gap-3">
+          <label class="text-xs font-medium text-slate-300" for="roomId">Room key</label>
+          <input id="roomId" placeholder="Room key" inputmode="text" class="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-400 transition focus:border-cyan-400 focus:ring-2" />
+          <label class="text-xs font-medium text-slate-300" for="cameraName">Camera name</label>
+          <input id="cameraName" placeholder="Camera name (optional)" maxlength="24" class="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-400 transition focus:border-cyan-400 focus:ring-2" />
+          <button id="connectRoom" class="mt-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">Authorize &amp; Connect</button>
+          <button id="rejoinLast" class="rounded-xl border border-slate-600 bg-slate-800/70 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-slate-400 hover:bg-slate-700">Rejoin last session</button>
         </div>
-      </div>
-
-      <video id="localVideo" autoplay playsinline muted></video>
-      <p id="emptyState" class="panelText paneltext">No cameras live yet. Waiting for a camera to join…</p>
-      <div id="remoteVideos" class="grid"></div>
-      <section id="timelinePanel" class="timelinePanel" aria-live="polite">
-        <p class="panelTitle paneltitle">Session timeline</p>
-        <ul id="sessionTimeline"></ul>
       </section>
 
-      <button id="retryPlayback" class="secondary">
-        Tap if video doesn't play
-      </button>
+      <section id="roleScreen" class="screen rounded-2xl border border-white/10 bg-slate-900/70 p-4 sm:p-5">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.15em] text-cyan-200">Connection Established</h2>
+        <p id="connectedRoomLabel" class="mt-2 text-sm text-slate-200"></p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button id="startCamera" class="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">Deploy as camera</button>
+          <button id="startViewer" class="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">View camera feeds</button>
+          <button id="changeRoom" class="rounded-xl border border-slate-600 bg-slate-800/70 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-slate-400 hover:bg-slate-700">Change room</button>
+        </div>
+      </section>
+
+      <section id="liveScreen" class="screen">
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+            <p id="liveRoomLabel" class="text-sm font-medium text-slate-200"></p>
+            <div class="flex flex-wrap gap-2">
+              <button id="toggleMute" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Mute</button>
+              <button id="toggleCamera" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Camera off</button>
+              <button id="toggleMotionFollow" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Motion follow: Off</button>
+              <button id="toggleLayout" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Focus layout</button>
+              <button id="disconnectRoom" class="rounded-xl border border-rose-500/50 bg-rose-950/40 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:border-rose-400">Disconnect</button>
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-center justify-between gap-3">
+            <div id="statusMessage" class="min-h-6 text-sm text-cyan-200" role="status" aria-live="polite"></div>
+            <div id="connectionBadge" class="text-xs text-slate-300">Connecting…</div>
+          </div>
+
+          <p id="emptyState" class="mt-4 rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-3 py-2 text-sm text-slate-300">No camera yet. Waiting for a camera to join…</p>
+
+          <div id="remoteVideos" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
+
+          <section id="timelinePanel" class="mt-5 border-t border-white/10 pt-4" aria-live="polite">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-200">Session timeline</h2>
+            <ul id="sessionTimeline" class="mt-2 max-h-44 space-y-1 overflow-y-auto text-xs text-slate-300"></ul>
+          </section>
+
+          <button id="retryPlayback" class="mt-4 rounded-xl border border-slate-600 bg-slate-800/70 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">
+            Tap if video doesn't play
+          </button>
+        </div>
+      </section>
     </div>
-  </div>
+  </main>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
