@@ -1,0 +1,246 @@
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.15), transparent 35%),
+    radial-gradient(circle at 80% 10%, rgba(0, 153, 255, 0.22), transparent 40%),
+    linear-gradient(160deg, #040b16, #02060c 45%, #07111f);
+  color: #e7f6ff;
+  margin: 0;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.wrap {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.titleBlock {
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #82d8ff;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+h1 {
+  margin: 0;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 18px rgba(52, 173, 255, 0.42);
+}
+
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+}
+
+.panel,
+.panel1 {
+  border: 1px solid rgba(87, 176, 255, 0.34);
+  background: linear-gradient(180deg, rgba(13, 24, 45, 0.94), rgba(9, 17, 33, 0.92));
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 0 0 1px rgba(138, 222, 255, 0.12), 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.panelTitle,
+.paneltitle {
+  margin: 0;
+  color: #7ad9ff;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.82rem;
+}
+
+.panelText,
+.paneltext {
+  color: #d0e7ff;
+}
+
+input, button {
+  padding: 12px;
+  margin: 8px 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 201, 255, 0.34);
+  background: rgba(4, 11, 22, 0.85);
+  color: #e8f7ff;
+}
+
+select {
+  padding: 12px;
+  margin: 8px 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 201, 255, 0.34);
+  background: rgba(4, 11, 22, 0.85);
+  color: #e8f7ff;
+}
+
+.signInRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+input {
+  width: min(420px, 100%);
+  outline: none;
+}
+
+input:focus {
+  border-color: rgba(117, 221, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(117, 221, 255, 0.2);
+}
+
+.buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+video {
+  width: 100%;
+  max-width: 560px;
+  margin-top: 20px;
+  background: black;
+  border-radius: 12px;
+  border: 1px solid rgba(139, 225, 255, 0.24);
+}
+
+#remoteVideos {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+#remoteVideos.grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+#remoteVideos.focus {
+  grid-template-columns: 1fr;
+}
+
+.videoCard {
+  border: 1px solid rgba(139, 225, 255, 0.24);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(7, 18, 32, 0.72);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.videoCard.motionActive {
+  border-color: rgba(255, 211, 115, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 211, 115, 0.2);
+}
+
+.videoCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.cameraName {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #bceeff;
+  font-weight: 600;
+}
+
+.feedStatus {
+  font-size: 0.72rem;
+  color: #8ce9ae;
+}
+
+.feedStatus.motion {
+  color: #ffd678;
+  font-weight: 700;
+}
+
+.videoActions {
+  display: flex;
+  gap: 6px;
+}
+
+.secondary {
+  background: rgba(17, 35, 58, 0.9);
+  color: #f4f4f4;
+}
+
+.status {
+  min-height: 24px;
+  color: #8ae8ff;
+  margin: 8px 0;
+  text-shadow: 0 0 10px rgba(38, 173, 255, 0.45);
+}
+
+.connectionBadge {
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  color: #9fd8ff;
+}
+
+.connectionBadge.online {
+  color: #95f3ae;
+}
+
+.connectionBadge.offline {
+  color: #ffb8b8;
+}
+
+.liveHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.liveHeaderControls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timelinePanel {
+  margin-top: 18px;
+  border-top: 1px solid rgba(139, 225, 255, 0.24);
+  padding-top: 12px;
+}
+
+#sessionTimeline {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow-y: auto;
+  color: #d0e7ff;
+  font-size: 0.86rem;
+}
+
+#sessionTimeline li {
+  margin-bottom: 6px;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+button:not(.secondary) {
+  background: linear-gradient(120deg, rgba(0, 159, 255, 0.35), rgba(0, 231, 255, 0.22));
+}
+
+button:hover {
+  border-color: rgba(148, 231, 255, 0.95);
+}
