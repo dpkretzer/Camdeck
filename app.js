@@ -367,39 +367,11 @@ function makePeer(targetId, initiator) {
         data: { type: "candidate", candidate: event.candidate }
       });
     }
-  };
+});
 
-  if (role === "camera" && localStream) {
-    localStream.getTracks().forEach((track) => {
-      pc.addTrack(track, localStream);
-    });
-  }
-
-  if (role === "viewer") {
-    pc.addTransceiver("video", { direction: "recvonly" });
-
-    pc.ontrack = (event) => {
-      attachRemoteVideo(targetId, event.streams[0]);
-    };
-  }
-
-  peers.set(targetId, pc);
-
-  if (initiator) {
-    createOffer(targetId, pc);
-  }
-
-  return pc;
-}
-
-async function createOffer(targetId, pc) {
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  socket.emit("signal", {
-    target: targetId,
-    data: { type: "offer", sdp: pc.localDescription }
-  });
+function validateRoomId(roomId) {
+    // Validate the room ID (this is just a placeholder, implement your validation logic)
+    return roomId && roomId.length > 0;
 }
 
 function attachRemoteVideo(id, stream) {

@@ -74,6 +74,21 @@ input, button {
   color: #e8f7ff;
 }
 
+select {
+  padding: 12px;
+  margin: 8px 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 201, 255, 0.34);
+  background: rgba(4, 11, 22, 0.85);
+  color: #e8f7ff;
+}
+
+.signInRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 input {
   width: min(420px, 100%);
   outline: none;
