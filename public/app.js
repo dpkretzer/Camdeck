@@ -18,8 +18,6 @@ const toggleCameraBtn = document.getElementById("toggleCamera");
 const startRecordingBtn = document.getElementById("startRecording");
 const stopRecordingBtn = document.getElementById("stopRecording");
 
-const connectedRoomLabel = document.getElementById("connectedRoomLabel");
-const liveRoomLabel = document.getElementById("liveRoomLabel");
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
 const emptyState = document.getElementById("emptyState");
@@ -604,10 +602,8 @@ function connectRoom() {
   }
 
   currentRoomId = enteredRoom;
-  roomIdInput.value = currentRoomId;
-  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
-  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
-  setStatus("Room number accepted. Choose camera or viewer.");
+  roomIdInput.value = "";
+  setStatus("Access granted. Choose camera or viewer.");
   saveSession();
   showScreen(roleScreen);
 }
@@ -953,10 +949,8 @@ rejoinLastBtn.addEventListener("click", async () => {
   }
 
   currentRoomId = normalizeRoomId(previous.roomId);
-  roomIdInput.value = currentRoomId;
+  roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
-  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
-  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
   showScreen(roleScreen);
   setStatus("Last session loaded.");
 
