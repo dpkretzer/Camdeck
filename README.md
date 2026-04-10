@@ -12,3 +12,5 @@ Run locally:
 npm install
 npm start
 ```
+
+If the page loads but cannot join rooms, verify the server is running and open `http://localhost:3000` (not the HTML file directly).

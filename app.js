@@ -37,7 +37,7 @@ const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
 function normalizeRoomId(value) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "");
+  return value.trim();
 }
 
 function showScreen(screen) {
@@ -49,6 +49,11 @@ function showScreen(screen) {
 function setStatus(message) {
   statusMessage.textContent = message || "";
 }
+
+window.addEventListener("error", (event) => {
+  const detail = event?.message || "Unexpected app error.";
+  setStatus(`App error: ${detail}`);
+});
 
 function setConnectionBadge(connected) {
   connectionBadge.textContent = connected ? "Server connection: online" : "Server connection: offline";
@@ -117,7 +122,7 @@ function ensureSocketConnected() {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error("Could not connect to server"));
+      reject(new Error("Could not connect to server. Is KoziKamera running?"));
     }, 5000);
 
     const onConnect = () => {
@@ -532,6 +537,11 @@ socket.on("disconnect", () => {
   }
 });
 
+socket.on("connect_error", (error) => {
+  setConnectionBadge(false);
+  setStatus(`Server connection failed: ${error?.message || "Unknown error"}`);
+});
+
 connectRoomBtn.addEventListener("click", connectRoom);
 roomIdInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -590,10 +600,6 @@ rejoinLastBtn.addEventListener("click", async () => {
   } else if (previous.role === "viewer") {
     await startViewer();
   }
-});
-
-roomIdInput.addEventListener("input", () => {
-  roomIdInput.value = normalizeRoomId(roomIdInput.value);
 });
 
 applyLayout();
