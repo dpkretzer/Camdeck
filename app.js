@@ -37,7 +37,7 @@ const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
 function normalizeRoomId(value) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "");
+  return value.trim();
 }
 
 function showScreen(screen) {
@@ -628,10 +628,6 @@ rejoinLastBtn.addEventListener("click", async () => {
   } else if (previous.role === "viewer") {
     await startViewer();
   }
-});
-
-roomIdInput.addEventListener("input", () => {
-  roomIdInput.value = normalizeRoomId(roomIdInput.value);
 });
 
 applyLayout();
