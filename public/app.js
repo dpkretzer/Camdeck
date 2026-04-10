@@ -42,6 +42,8 @@ let availableCameraDevices = [];
 let selectedCameraDeviceId = "";
 const peers = new Map();
 const cameraNames = new Map();
+const cameraVideoStates = new Map();
+const tileMediaStates = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
@@ -196,13 +198,15 @@ function ensureSocketConnected() {
 }
 
 function joinRoomWithRole(roleName) {
+  const [videoTrack] = localStream?.getVideoTracks?.() || [];
   return new Promise((resolve, reject) => {
     socket.emit(
       "join-room",
       {
         roomId: currentRoomId,
         role: roleName,
-        name: roleName === "camera" ? cameraName() : ""
+        name: roleName === "camera" ? cameraName() : "",
+        videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined
       },
       (response) => {
         if (!response || !response.ok) {
@@ -291,7 +295,24 @@ function buildParticipantTile(id, displayName, isLocal = false) {
     createStatusBadge("Cam on", "bg-cyan-500/20 text-cyan-200")
   );
 
-  footer.append(name, badges);
+  const tileControls = document.createElement("div");
+  tileControls.className = "flex items-center gap-2";
+  tileControls.append(badges);
+
+  const videoToggleBtn = document.createElement("button");
+  videoToggleBtn.id = `video-toggle-${id}`;
+  videoToggleBtn.className = "secondary px-2 py-1 text-[10px]";
+  videoToggleBtn.textContent = "Camera off";
+  videoToggleBtn.disabled = !isLocal || role !== "camera";
+  videoToggleBtn.classList.toggle("opacity-50", videoToggleBtn.disabled);
+  videoToggleBtn.addEventListener("click", () => {
+    if (id === "local") {
+      toggleCamera();
+    }
+  });
+  tileControls.append(videoToggleBtn);
+
+  footer.append(name, tileControls);
   card.append(mediaFrame, footer);
 
   const handleCanPlay = () => {
@@ -328,6 +349,7 @@ function setTileLoading(id, visible, message = "Loading video…") {
 function setTileMediaBadges(id, micOn, camOn) {
   const badges = document.getElementById(`badges-${id}`);
   if (!badges) return;
+  tileMediaStates.set(id, { micOn, camOn });
   badges.innerHTML = "";
   badges.append(
     createStatusBadge(micOn ? "Mic on" : "Mic off", micOn ? "bg-emerald-500/20 text-emerald-200" : "bg-rose-500/20 text-rose-200"),
@@ -335,10 +357,18 @@ function setTileMediaBadges(id, micOn, camOn) {
   );
 }
 
+function setTileVideoToggleButton(id, camOn) {
+  const toggleBtn = document.getElementById(`video-toggle-${id}`);
+  if (!toggleBtn) return;
+  toggleBtn.textContent = camOn ? "Camera off" : "Camera on";
+}
+
 function clearPeersAndVideos() {
   peers.forEach((pc) => pc.close());
   peers.clear();
   cameraNames.clear();
+  cameraVideoStates.clear();
+  tileMediaStates.clear();
   motionWatchers.forEach(({ intervalId }) => clearInterval(intervalId));
   motionWatchers.clear();
   lastMotionLogAt.clear();
@@ -426,16 +456,18 @@ function attachRemoteVideo(id, stream) {
 
   const [videoTrack] = stream.getVideoTracks();
   const [audioTrack] = stream.getAudioTracks();
-  setTileMediaBadges(id, audioTrack ? audioTrack.enabled : false, videoTrack ? videoTrack.enabled : false);
+  const videoEnabled = cameraVideoStates.get(id) ?? (videoTrack ? videoTrack.enabled : false);
+  setTileMediaBadges(id, audioTrack ? audioTrack.enabled : false, videoEnabled);
+  setTileVideoToggleButton(id, videoEnabled);
 
   video.play().catch(() => {
     setTileLoading(id, false);
     setTilePlaceholder(id, true, "Tap retry if playback is blocked");
   });
 
-  if (!videoTrack) {
+  if (!videoTrack || !videoEnabled) {
     setTileLoading(id, false);
-    setTilePlaceholder(id, true, "No camera yet");
+    setTilePlaceholder(id, true, videoEnabled ? "No camera yet" : "Camera is off");
   }
 
   detectMotionOnVideo(id, video);
@@ -455,7 +487,9 @@ function mountLocalTile(stream, cameraLabel) {
 
   const [videoTrack] = stream.getVideoTracks();
   const [audioTrack] = stream.getAudioTracks();
-  setTileMediaBadges("local", audioTrack ? audioTrack.enabled : false, videoTrack ? videoTrack.enabled : false);
+  const videoEnabled = videoTrack ? videoTrack.enabled : false;
+  setTileMediaBadges("local", audioTrack ? audioTrack.enabled : false, videoEnabled);
+  setTileVideoToggleButton("local", videoEnabled);
 
   video.play().catch(() => {
     setTileLoading("local", false);
@@ -891,9 +925,12 @@ function toggleCamera() {
   }
 
   videoTrack.enabled = !videoTrack.enabled;
+  cameraVideoStates.set(socket.id, videoTrack.enabled);
   setTileMediaBadges("local", localStream.getAudioTracks()[0]?.enabled ?? false, videoTrack.enabled);
+  setTileVideoToggleButton("local", videoTrack.enabled);
   setTilePlaceholder("local", !videoTrack.enabled, "Camera is off");
   applyLocalControlButtons();
+  socket.emit("camera-video-state", { enabled: videoTrack.enabled });
   setStatus(videoTrack.enabled ? "Camera enabled." : "Camera disabled.");
 }
 
@@ -901,17 +938,19 @@ socket.on("existing-cameras", (cameras) => {
   if (role !== "viewer") return;
   console.log("[WebRTC] existing-cameras", { count: cameras.length, cameras });
 
-  cameras.forEach(({ id, name }) => {
+  cameras.forEach(({ id, name, videoEnabled }) => {
     cameraNames.set(id, name || "Camera feed");
+    cameraVideoStates.set(id, videoEnabled !== false);
     addTimelineEvent(`${cameraNames.get(id)} available.`);
     if (!peers.has(id)) makePeer(id, true);
   });
 });
 
-socket.on("camera-joined", ({ id, name }) => {
+socket.on("camera-joined", ({ id, name, videoEnabled }) => {
   if (role !== "viewer") return;
   console.log("[WebRTC] camera-joined", { id, name });
   cameraNames.set(id, name || "Camera feed");
+  cameraVideoStates.set(id, videoEnabled !== false);
   addTimelineEvent(`${cameraNames.get(id)} joined.`);
 
   if (!peers.has(id)) makePeer(id, true);
@@ -954,6 +993,7 @@ socket.on("camera-left", ({ id }) => {
   }
 
   cameraNames.delete(id);
+  cameraVideoStates.delete(id);
   const watcher = motionWatchers.get(id);
   if (watcher) {
     clearInterval(watcher.intervalId);
@@ -965,6 +1005,24 @@ socket.on("camera-left", ({ id }) => {
   if (card) card.remove();
   addTimelineEvent("A camera disconnected.");
   updateEmptyState();
+});
+
+socket.on("camera-video-state", ({ id, enabled }) => {
+  const cameraEnabled = enabled !== false;
+  cameraVideoStates.set(id, cameraEnabled);
+
+  const cardId = id === socket.id && role === "camera" ? "local" : id;
+  if (!document.getElementById(`card-${cardId}`)) return;
+
+  const micOn = tileMediaStates.get(cardId)?.micOn ?? (cardId === "local" ? localStream?.getAudioTracks?.()[0]?.enabled ?? false : false);
+
+  setTileMediaBadges(cardId, micOn, cameraEnabled);
+  setTileVideoToggleButton(cardId, cameraEnabled);
+  setTilePlaceholder(cardId, !cameraEnabled, "Camera is off");
+  if (!cameraEnabled) {
+    setTileLoading(cardId, false);
+  }
+  addTimelineEvent(`${cameraNames.get(id) || "Camera feed"} camera ${cameraEnabled ? "enabled" : "disabled"}.`);
 });
 
 async function restoreSessionAfterReconnect() {
