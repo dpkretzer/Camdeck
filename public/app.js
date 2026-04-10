@@ -6,6 +6,7 @@ const liveScreen = document.getElementById("liveScreen");
 
 const roomIdInput = document.getElementById("roomId");
 const cameraNameInput = document.getElementById("cameraName");
+const cameraSelectInput = document.getElementById("cameraSelect");
 const connectRoomBtn = document.getElementById("connectRoom");
 const changeRoomBtn = document.getElementById("changeRoom");
 const disconnectRoomBtn = document.getElementById("disconnectRoom");
@@ -15,9 +16,9 @@ const toggleLayoutBtn = document.getElementById("toggleLayout");
 const toggleMotionFollowBtn = document.getElementById("toggleMotionFollow");
 const toggleMuteBtn = document.getElementById("toggleMute");
 const toggleCameraBtn = document.getElementById("toggleCamera");
+const startRecordingBtn = document.getElementById("startRecording");
+const stopRecordingBtn = document.getElementById("stopRecording");
 
-const connectedRoomLabel = document.getElementById("connectedRoomLabel");
-const liveRoomLabel = document.getElementById("liveRoomLabel");
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
 const emptyState = document.getElementById("emptyState");
@@ -33,6 +34,12 @@ let localStream = null;
 let layoutMode = "grid";
 let motionFollowEnabled = false;
 let localPeerTile = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStream = null;
+let recordingSourceLabel = "";
+let availableCameraDevices = [];
+let selectedCameraDeviceId = "";
 const peers = new Map();
 const cameraNames = new Map();
 const motionWatchers = new Map();
@@ -78,6 +85,10 @@ function roomId() {
 
 function cameraName() {
   return cameraNameInput.value.trim().slice(0, 24);
+}
+
+function cameraDeviceId() {
+  return cameraSelectInput.value || selectedCameraDeviceId || "";
 }
 
 function saveSession(nextRole = role) {
@@ -126,6 +137,14 @@ function applyLocalControlButtons() {
   const [videoTrack] = localStream.getVideoTracks();
   toggleMuteBtn.textContent = audioTrack && audioTrack.enabled ? "Mute" : "Unmute";
   toggleCameraBtn.textContent = videoTrack && videoTrack.enabled ? "Camera off" : "Camera on";
+}
+
+function applyRecordingButtons() {
+  const isRecording = mediaRecorder && mediaRecorder.state === "recording";
+  startRecordingBtn.disabled = isRecording;
+  stopRecordingBtn.disabled = !isRecording;
+  startRecordingBtn.classList.toggle("opacity-50", isRecording);
+  stopRecordingBtn.classList.toggle("opacity-50", !isRecording);
 }
 
 function updateEmptyState() {
@@ -456,7 +475,212 @@ function stopLocalStream() {
   applyLocalControlButtons();
 }
 
+function updateCameraSelectOptions(devices) {
+  cameraSelectInput.innerHTML = "";
+  devices.forEach((device, index) => {
+    const option = document.createElement("option");
+    option.value = device.deviceId;
+    option.textContent = device.label || `Camera ${index + 1}`;
+    cameraSelectInput.appendChild(option);
+  });
+
+  if (!devices.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No camera devices found";
+    cameraSelectInput.appendChild(option);
+    cameraSelectInput.disabled = true;
+    selectedCameraDeviceId = "";
+    return;
+  }
+
+  cameraSelectInput.disabled = false;
+  const hasSelection = devices.some((device) => device.deviceId === selectedCameraDeviceId);
+  selectedCameraDeviceId = hasSelection ? selectedCameraDeviceId : devices[0].deviceId;
+  cameraSelectInput.value = selectedCameraDeviceId;
+}
+
+async function refreshCameraDevices() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    availableCameraDevices = devices.filter((device) => device.kind === "videoinput");
+    console.log("[MediaDevices] devices", availableCameraDevices.map((device) => ({ deviceId: device.deviceId, label: device.label })));
+    updateCameraSelectOptions(availableCameraDevices);
+  } catch (error) {
+    console.error("Failed to enumerate devices", error);
+  }
+}
+
+async function replacePeerTracks(stream) {
+  const [nextVideoTrack] = stream.getVideoTracks();
+  const [nextAudioTrack] = stream.getAudioTracks();
+
+  peers.forEach((pc) => {
+    const senders = pc.getSenders();
+    const videoSender = senders.find((sender) => sender.track && sender.track.kind === "video");
+    const audioSender = senders.find((sender) => sender.track && sender.track.kind === "audio");
+
+    if (videoSender && nextVideoTrack) {
+      videoSender.replaceTrack(nextVideoTrack);
+    } else if (nextVideoTrack) {
+      pc.addTrack(nextVideoTrack, stream);
+    }
+
+    if (audioSender && nextAudioTrack) {
+      audioSender.replaceTrack(nextAudioTrack);
+    } else if (nextAudioTrack) {
+      pc.addTrack(nextAudioTrack, stream);
+    }
+  });
+}
+
+async function startSelectedCameraStream() {
+  selectedCameraDeviceId = cameraDeviceId();
+  console.log("[MediaDevices] selected deviceId", selectedCameraDeviceId || "default");
+  const stream = await navigator.mediaDevices.getUserMedia(localMediaConstraints());
+  console.log("[MediaDevices] stream started", {
+    deviceId: selectedCameraDeviceId || "default",
+    audioTracks: stream.getAudioTracks().length,
+    videoTracks: stream.getVideoTracks().length
+  });
+  return stream;
+}
+
+async function switchCameraStream() {
+  if (role !== "camera" || !localStream) return;
+
+  const previousStream = localStream;
+  const wasRecordingLocalStream = mediaRecorder && mediaRecorder.state === "recording" && recordingSourceLabel === "camera-local-stream";
+
+  try {
+    const nextStream = await startSelectedCameraStream();
+    localStream = nextStream;
+    mountLocalTile(localStream, cameraName() || "You (camera)");
+    await replacePeerTracks(localStream);
+    previousStream.getTracks().forEach((track) => track.stop());
+    applyLocalControlButtons();
+    addTimelineEvent("Camera source switched.");
+
+    if (wasRecordingLocalStream) {
+      stopRecording();
+      setTimeout(() => startRecording(), 0);
+    }
+  } catch (error) {
+    console.error("Failed to switch camera stream", error);
+    setStatus("Could not switch camera device.");
+    selectedCameraDeviceId = previousStream.getVideoTracks()[0]?.getSettings()?.deviceId || selectedCameraDeviceId;
+    cameraSelectInput.value = selectedCameraDeviceId;
+  }
+}
+
+function getViewerRecordableStream() {
+  const videos = Array.from(remoteVideos.querySelectorAll("video"));
+  for (const video of videos) {
+    const stream = video.srcObject;
+    if (!(stream instanceof MediaStream)) continue;
+    if (stream.getVideoTracks().length > 0) {
+      return stream;
+    }
+  }
+  return null;
+}
+
+function resolveRecordingTarget() {
+  if (role === "camera" && localStream) {
+    return { stream: localStream, label: "camera-local-stream" };
+  }
+
+  if (role === "viewer") {
+    const remoteStream = getViewerRecordableStream();
+    if (remoteStream) {
+      return { stream: remoteStream, label: "viewer-remote-stream" };
+    }
+  }
+
+  return null;
+}
+
+function buildRecordingMimeType() {
+  const preferredTypes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  for (const type of preferredTypes) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
+}
+
+function startRecording() {
+  if (mediaRecorder && mediaRecorder.state === "recording") return;
+
+  const target = resolveRecordingTarget();
+  if (!target?.stream) {
+    setStatus("No stream available to record yet.");
+    return;
+  }
+
+  recordingStream = target.stream;
+  recordingSourceLabel = target.label;
+  recordedChunks = [];
+
+  const mimeType = buildRecordingMimeType();
+  try {
+    mediaRecorder = mimeType ? new MediaRecorder(recordingStream, { mimeType }) : new MediaRecorder(recordingStream);
+  } catch (error) {
+    console.error("Failed to start recorder", error);
+    setStatus("Could not start recording in this browser.");
+    mediaRecorder = null;
+    recordingStream = null;
+    recordingSourceLabel = "";
+    applyRecordingButtons();
+    return;
+  }
+
+  mediaRecorder.ondataavailable = (event) => {
+    console.log("Recording chunk size:", event.data?.size || 0);
+    if (event.data && event.data.size > 0) {
+      recordedChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    const type = mediaRecorder?.mimeType || "video/webm";
+    const blob = new Blob(recordedChunks, { type });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const fileName = `camdeck-${recordingSourceLabel}-${timestamp}.webm`;
+    const downloadUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+
+    console.log("Recording stopped", {
+      source: recordingSourceLabel,
+      chunks: recordedChunks.length,
+      totalBytes: blob.size
+    });
+    setStatus(`Recording saved: ${fileName}`);
+
+    mediaRecorder = null;
+    recordingStream = null;
+    recordingSourceLabel = "";
+    recordedChunks = [];
+    applyRecordingButtons();
+  };
+
+  mediaRecorder.start(1000);
+  console.log("Recording started", { source: recordingSourceLabel, mimeType: mediaRecorder.mimeType });
+  setStatus("Recording started.");
+  applyRecordingButtons();
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state !== "recording") return;
+  mediaRecorder.stop();
+}
+
 function leaveRoom() {
+  stopRecording();
   socket.emit("leave-room");
   clearPeersAndVideos();
   stopLocalStream();
@@ -484,17 +708,17 @@ function connectRoom() {
   }
 
   currentRoomId = enteredRoom;
-  roomIdInput.value = currentRoomId;
-  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
-  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
-  setStatus("Room number accepted. Choose camera or viewer.");
+  roomIdInput.value = "";
+  setStatus("Access granted. Choose camera or viewer.");
   saveSession();
   showScreen(roleScreen);
 }
 
 function localMediaConstraints() {
+  const selectedDeviceId = cameraDeviceId();
   return {
     video: {
+      ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {}),
       width: { ideal: 1280, max: 1920 },
       height: { ideal: 720, max: 1080 },
       frameRate: { ideal: 24, max: 30 },
@@ -523,11 +747,12 @@ async function startCamera() {
   try {
     await ensureSocketConnected();
     console.log("[WebRTC] Socket connected for camera");
-    localStream = await navigator.mediaDevices.getUserMedia(localMediaConstraints());
+    localStream = await startSelectedCameraStream();
     console.log("[WebRTC] Local stream ready (camera)", {
       audioTracks: localStream.getAudioTracks().length,
       videoTracks: localStream.getVideoTracks().length
     });
+    await refreshCameraDevices();
 
     mountLocalTile(localStream, cameraName() || "You (camera)");
     await joinRoomWithRole("camera");
@@ -798,6 +1023,14 @@ changeRoomBtn.addEventListener("click", () => {
   setStatus("");
 });
 
+cameraSelectInput.addEventListener("change", async () => {
+  selectedCameraDeviceId = cameraSelectInput.value;
+  console.log("[MediaDevices] selected deviceId", selectedCameraDeviceId || "default");
+  if (role === "camera" && localStream) {
+    await switchCameraStream();
+  }
+});
+
 disconnectRoomBtn.addEventListener("click", disconnectAndReturnToRoleScreen);
 retryPlaybackBtn.addEventListener("click", () => {
   document.querySelectorAll("video").forEach((video) => {
@@ -822,6 +1055,8 @@ toggleMotionFollowBtn.addEventListener("click", () => {
 
 toggleMuteBtn.addEventListener("click", toggleMute);
 toggleCameraBtn.addEventListener("click", toggleCamera);
+startRecordingBtn.addEventListener("click", startRecording);
+stopRecordingBtn.addEventListener("click", stopRecording);
 
 rejoinLastBtn.addEventListener("click", async () => {
   const previous = loadSession();
@@ -831,10 +1066,8 @@ rejoinLastBtn.addEventListener("click", async () => {
   }
 
   currentRoomId = normalizeRoomId(previous.roomId);
-  roomIdInput.value = currentRoomId;
+  roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
-  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
-  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
   showScreen(roleScreen);
   setStatus("Last session loaded.");
 
@@ -849,4 +1082,10 @@ showScreen(homeScreen);
 applyLayout();
 applyMotionFollowButton();
 applyLocalControlButtons();
+applyRecordingButtons();
 setConnectionBadge(socket.connected);
+refreshCameraDevices();
+
+if (navigator.mediaDevices?.addEventListener) {
+  navigator.mediaDevices.addEventListener("devicechange", refreshCameraDevices);
+}
