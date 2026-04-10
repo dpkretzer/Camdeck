@@ -7,12 +7,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// serve root files
-app.use(express.static(__dirname));
+const publicDir = path.join(__dirname, 'public');
+
+// serve static assets from /public
+app.use(express.static(publicDir));
 
 // make / load index.html
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(publicDir, 'index.html'));
 });
 
 const rooms = new Map();
