@@ -37,7 +37,7 @@ const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
 function normalizeRoomId(value) {
-  return value.replace(/\D+/g, "");
+  return value.replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
 function showScreen(screen) {
