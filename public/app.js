@@ -15,9 +15,9 @@ const toggleLayoutBtn = document.getElementById("toggleLayout");
 const toggleMotionFollowBtn = document.getElementById("toggleMotionFollow");
 const toggleMuteBtn = document.getElementById("toggleMute");
 const toggleCameraBtn = document.getElementById("toggleCamera");
+const startRecordingBtn = document.getElementById("startRecording");
+const stopRecordingBtn = document.getElementById("stopRecording");
 
-const connectedRoomLabel = document.getElementById("connectedRoomLabel");
-const liveRoomLabel = document.getElementById("liveRoomLabel");
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
 const emptyState = document.getElementById("emptyState");
@@ -33,6 +33,10 @@ let localStream = null;
 let layoutMode = "grid";
 let motionFollowEnabled = false;
 let localPeerTile = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStream = null;
+let recordingSourceLabel = "";
 const peers = new Map();
 const cameraNames = new Map();
 const motionWatchers = new Map();
@@ -126,6 +130,14 @@ function applyLocalControlButtons() {
   const [videoTrack] = localStream.getVideoTracks();
   toggleMuteBtn.textContent = audioTrack && audioTrack.enabled ? "Mute" : "Unmute";
   toggleCameraBtn.textContent = videoTrack && videoTrack.enabled ? "Camera off" : "Camera on";
+}
+
+function applyRecordingButtons() {
+  const isRecording = mediaRecorder && mediaRecorder.state === "recording";
+  startRecordingBtn.disabled = isRecording;
+  stopRecordingBtn.disabled = !isRecording;
+  startRecordingBtn.classList.toggle("opacity-50", isRecording);
+  stopRecordingBtn.classList.toggle("opacity-50", !isRecording);
 }
 
 function updateEmptyState() {
@@ -456,7 +468,113 @@ function stopLocalStream() {
   applyLocalControlButtons();
 }
 
+function getViewerRecordableStream() {
+  const videos = Array.from(remoteVideos.querySelectorAll("video"));
+  for (const video of videos) {
+    const stream = video.srcObject;
+    if (!(stream instanceof MediaStream)) continue;
+    if (stream.getVideoTracks().length > 0) {
+      return stream;
+    }
+  }
+  return null;
+}
+
+function resolveRecordingTarget() {
+  if (role === "camera" && localStream) {
+    return { stream: localStream, label: "camera-local-stream" };
+  }
+
+  if (role === "viewer") {
+    const remoteStream = getViewerRecordableStream();
+    if (remoteStream) {
+      return { stream: remoteStream, label: "viewer-remote-stream" };
+    }
+  }
+
+  return null;
+}
+
+function buildRecordingMimeType() {
+  const preferredTypes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  for (const type of preferredTypes) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
+}
+
+function startRecording() {
+  if (mediaRecorder && mediaRecorder.state === "recording") return;
+
+  const target = resolveRecordingTarget();
+  if (!target?.stream) {
+    setStatus("No stream available to record yet.");
+    return;
+  }
+
+  recordingStream = target.stream;
+  recordingSourceLabel = target.label;
+  recordedChunks = [];
+
+  const mimeType = buildRecordingMimeType();
+  try {
+    mediaRecorder = mimeType ? new MediaRecorder(recordingStream, { mimeType }) : new MediaRecorder(recordingStream);
+  } catch (error) {
+    console.error("Failed to start recorder", error);
+    setStatus("Could not start recording in this browser.");
+    mediaRecorder = null;
+    recordingStream = null;
+    recordingSourceLabel = "";
+    applyRecordingButtons();
+    return;
+  }
+
+  mediaRecorder.ondataavailable = (event) => {
+    console.log("Recording chunk size:", event.data?.size || 0);
+    if (event.data && event.data.size > 0) {
+      recordedChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    const type = mediaRecorder?.mimeType || "video/webm";
+    const blob = new Blob(recordedChunks, { type });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const fileName = `camdeck-${recordingSourceLabel}-${timestamp}.webm`;
+    const downloadUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+
+    console.log("Recording stopped", {
+      source: recordingSourceLabel,
+      chunks: recordedChunks.length,
+      totalBytes: blob.size
+    });
+    setStatus(`Recording saved: ${fileName}`);
+
+    mediaRecorder = null;
+    recordingStream = null;
+    recordingSourceLabel = "";
+    recordedChunks = [];
+    applyRecordingButtons();
+  };
+
+  mediaRecorder.start(1000);
+  console.log("Recording started", { source: recordingSourceLabel, mimeType: mediaRecorder.mimeType });
+  setStatus("Recording started.");
+  applyRecordingButtons();
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state !== "recording") return;
+  mediaRecorder.stop();
+}
+
 function leaveRoom() {
+  stopRecording();
   socket.emit("leave-room");
   clearPeersAndVideos();
   stopLocalStream();
@@ -484,10 +602,8 @@ function connectRoom() {
   }
 
   currentRoomId = enteredRoom;
-  roomIdInput.value = currentRoomId;
-  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
-  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
-  setStatus("Room number accepted. Choose camera or viewer.");
+  roomIdInput.value = "";
+  setStatus("Access granted. Choose camera or viewer.");
   saveSession();
   showScreen(roleScreen);
 }
@@ -822,6 +938,8 @@ toggleMotionFollowBtn.addEventListener("click", () => {
 
 toggleMuteBtn.addEventListener("click", toggleMute);
 toggleCameraBtn.addEventListener("click", toggleCamera);
+startRecordingBtn.addEventListener("click", startRecording);
+stopRecordingBtn.addEventListener("click", stopRecording);
 
 rejoinLastBtn.addEventListener("click", async () => {
   const previous = loadSession();
@@ -831,10 +949,8 @@ rejoinLastBtn.addEventListener("click", async () => {
   }
 
   currentRoomId = normalizeRoomId(previous.roomId);
-  roomIdInput.value = currentRoomId;
+  roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
-  connectedRoomLabel.textContent = `Connected to room: ${currentRoomId}`;
-  liveRoomLabel.textContent = `Room: ${currentRoomId}`;
   showScreen(roleScreen);
   setStatus("Last session loaded.");
 
@@ -849,4 +965,5 @@ showScreen(homeScreen);
 applyLayout();
 applyMotionFollowButton();
 applyLocalControlButtons();
+applyRecordingButtons();
 setConnectionBadge(socket.connected);

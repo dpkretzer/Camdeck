@@ -18,8 +18,8 @@
         <h2 class="text-sm font-semibold uppercase tracking-[0.15em] text-cyan-200">Access Gateway</h2>
         <p class="mt-2 text-sm text-slate-300">Enter your secure room key to continue.</p>
         <div class="mt-4 grid gap-3">
-          <label class="text-xs font-medium text-slate-300" for="roomId">Room key</label>
-          <input id="roomId" placeholder="Room key" inputmode="text" class="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-400 transition focus:border-cyan-400 focus:ring-2" />
+          <label class="text-xs font-medium text-slate-300" for="roomId">Access key</label>
+          <input id="roomId" type="password" placeholder="Access key" inputmode="text" class="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-400 transition focus:border-cyan-400 focus:ring-2" />
           <label class="text-xs font-medium text-slate-300" for="cameraName">Camera name</label>
           <input id="cameraName" placeholder="Camera name (optional)" maxlength="24" class="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-400 transition focus:border-cyan-400 focus:ring-2" />
           <button id="connectRoom" class="mt-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">Authorize &amp; Connect</button>
@@ -29,7 +29,6 @@
 
       <section id="roleScreen" class="screen rounded-2xl border border-white/10 bg-slate-900/70 p-4 sm:p-5">
         <h2 class="text-sm font-semibold uppercase tracking-[0.15em] text-cyan-200">Connection Established</h2>
-        <p id="connectedRoomLabel" class="mt-2 text-sm text-slate-200"></p>
         <div class="mt-4 flex flex-wrap gap-2">
           <button id="startCamera" class="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">Deploy as camera</button>
           <button id="startViewer" class="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">View camera feeds</button>
@@ -40,10 +39,11 @@
       <section id="liveScreen" class="screen">
         <div class="rounded-2xl border border-white/10 bg-slate-900/70 p-4 sm:p-5">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
-            <p id="liveRoomLabel" class="text-sm font-medium text-slate-200"></p>
             <div class="flex flex-wrap gap-2">
               <button id="toggleMute" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Mute</button>
               <button id="toggleCamera" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Camera off</button>
+              <button id="startRecording" class="rounded-xl border border-emerald-500/50 bg-emerald-950/40 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:border-emerald-400">Start Recording</button>
+              <button id="stopRecording" class="rounded-xl border border-amber-500/50 bg-amber-950/40 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:border-amber-400">Stop Recording</button>
               <button id="toggleMotionFollow" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Motion follow: Off</button>
               <button id="toggleLayout" class="rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-slate-400">Focus layout</button>
               <button id="disconnectRoom" class="rounded-xl border border-rose-500/50 bg-rose-950/40 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:border-rose-400">Disconnect</button>
