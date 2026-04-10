@@ -27,6 +27,7 @@ function ensureRoom(roomId) {
 }
 
 io.on('connection', (socket) => {
+  console.log('[Signal] socket connected', { socketId: socket.id });
   function removeSocketFromRoom() {
     const roomId = socket.data.roomId;
     const role = socket.data.role;
@@ -37,6 +38,7 @@ io.on('connection', (socket) => {
     if (role === 'viewer') room.viewers.delete(socket.id);
 
     if (role === 'camera') {
+      console.log('[Signal] camera-left broadcast', { roomId, socketId: socket.id });
       socket.to(roomId).emit('camera-left', { id: socket.id });
     }
 
@@ -51,6 +53,7 @@ io.on('connection', (socket) => {
   }
 
   socket.on('join-room', ({ roomId, role, name, label }, callback) => {
+    console.log('[Signal] join-room request', { socketId: socket.id, roomId, role, name, label });
     if (!roomId || !role) {
       if (typeof callback === 'function') {
         callback({ ok: false, error: 'Missing room or role.' });
@@ -73,6 +76,7 @@ io.on('connection', (socket) => {
         const s = io.sockets.sockets.get(id);
         return { id, label: s?.data?.label || 'Camera' };
       });
+      console.log('[Signal] existing-cameras emitted', { to: socket.id, roomId, cameras });
       socket.emit(
         'existing-cameras',
         cameras.map((camera) => ({ id: camera.id, name: camera.label }))
@@ -80,6 +84,7 @@ io.on('connection', (socket) => {
     }
 
     if (role === 'camera') {
+      console.log('[Signal] camera-joined broadcast', { roomId, id: socket.id, name: socket.data.label });
       socket.to(roomId).emit('camera-joined', {
         id: socket.id,
         name: socket.data.label
@@ -94,6 +99,11 @@ io.on('connection', (socket) => {
   socket.on('signal', ({ target, payload, data }) => {
     const signalPayload = payload || data;
     if (!target || !signalPayload) return;
+    console.log('[Signal] relaying message', {
+      from: socket.id,
+      to: target,
+      type: signalPayload.type
+    });
     io.to(target).emit('signal', {
       from: socket.id,
       data: signalPayload
@@ -103,6 +113,7 @@ io.on('connection', (socket) => {
   socket.on('leave-room', removeSocketFromRoom);
 
   socket.on('disconnect', () => {
+    console.log('[Signal] socket disconnected', { socketId: socket.id });
     removeSocketFromRoom();
   });
 });
