@@ -702,8 +702,32 @@ socket.on("camera-left", ({ id }) => {
   updateEmptyState();
 });
 
+async function restoreSessionAfterReconnect() {
+  if (!role || !currentRoomId) return;
+
+  clearPeersAndVideos();
+
+  try {
+    await joinRoomWithRole(role);
+    if (role === "camera" && localStream) {
+      mountLocalTile(localStream, cameraName() || "You (camera)");
+      addTimelineEvent("Reconnected and resumed camera broadcast.");
+    } else if (role === "viewer") {
+      updateEmptyState();
+      addTimelineEvent("Reconnected and reloading camera feeds.");
+    }
+    setStatus(role === "camera" ? "Camera reconnected." : "Viewer reconnected.");
+  } catch (err) {
+    console.error("Reconnect join failed:", err);
+    setStatus("Reconnection failed. Please disconnect and reconnect.");
+  }
+}
+
 socket.on("connect", () => {
   setConnectionBadge(true);
+  if (role && currentRoomId) {
+    restoreSessionAfterReconnect();
+  }
 });
 
 socket.on("disconnect", () => {
