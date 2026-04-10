@@ -52,7 +52,7 @@ io.on('connection', (socket) => {
     delete socket.data.label;
   }
 
-  socket.on('join-room', ({ roomId, role, name, label }, callback) => {
+  socket.on('join-room', ({ roomId, role, name, label, videoEnabled }, callback) => {
     console.log('[Signal] join-room request', { socketId: socket.id, roomId, role, name, label });
     if (!roomId || !role) {
       if (typeof callback === 'function') {
@@ -64,6 +64,7 @@ io.on('connection', (socket) => {
     socket.data.roomId = roomId;
     socket.data.role = role;
     socket.data.label = label || name || (role === 'camera' ? 'Camera feed' : 'Viewer');
+    socket.data.videoEnabled = role === 'camera' ? videoEnabled !== false : undefined;
 
     const room = ensureRoom(roomId);
     if (role === 'camera') room.cameras.add(socket.id);
@@ -74,12 +75,16 @@ io.on('connection', (socket) => {
     if (role === 'viewer') {
       const cameras = [...room.cameras].map(id => {
         const s = io.sockets.sockets.get(id);
-        return { id, label: s?.data?.label || 'Camera' };
+        return {
+          id,
+          label: s?.data?.label || 'Camera',
+          videoEnabled: s?.data?.videoEnabled !== false
+        };
       });
       console.log('[Signal] existing-cameras emitted', { to: socket.id, roomId, cameras });
       socket.emit(
         'existing-cameras',
-        cameras.map((camera) => ({ id: camera.id, name: camera.label }))
+        cameras.map((camera) => ({ id: camera.id, name: camera.label, videoEnabled: camera.videoEnabled }))
       );
     }
 
@@ -87,7 +92,8 @@ io.on('connection', (socket) => {
       console.log('[Signal] camera-joined broadcast', { roomId, id: socket.id, name: socket.data.label });
       socket.to(roomId).emit('camera-joined', {
         id: socket.id,
-        name: socket.data.label
+        name: socket.data.label,
+        videoEnabled: socket.data.videoEnabled !== false
       });
     }
 
@@ -107,6 +113,21 @@ io.on('connection', (socket) => {
     io.to(target).emit('signal', {
       from: socket.id,
       data: signalPayload
+    });
+  });
+
+  socket.on('camera-video-state', ({ enabled }) => {
+    const roomId = socket.data.roomId;
+    if (!roomId || socket.data.role !== 'camera') return;
+    socket.data.videoEnabled = enabled !== false;
+    console.log('[Signal] camera-video-state broadcast', {
+      roomId,
+      id: socket.id,
+      enabled: socket.data.videoEnabled
+    });
+    io.to(roomId).emit('camera-video-state', {
+      id: socket.id,
+      enabled: socket.data.videoEnabled
     });
   });
 
