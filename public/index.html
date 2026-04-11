@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KoziKamera Security</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
@@ -13,33 +16,49 @@
       <header class="top-bar">
         <div>
           <p class="eyebrow">Secure camera network</p>
-          <h1>KoziKamera Security</h1>
+          <h1 class="title">KoziKamera Security</h1>
         </div>
+        <div class="connection-badge">Live Ops Dashboard</div>
       </header>
 
-      <section id="homeScreen" class="screen active glass-panel">
-        <h2 class="panel-title">Access Gateway</h2>
-        <p class="panel-text">Enter your secure room key to continue.</p>
-
-        <div class="form-grid">
-          <label for="roomId">Access key</label>
-          <input id="roomId" type="password" placeholder="Access key" inputmode="text" />
-
-          <label for="cameraName">Camera name</label>
-          <input id="cameraName" placeholder="Camera name (optional)" maxlength="24" />
-
-          <label for="cameraSelect">Camera device</label>
-          <select id="cameraSelect"></select>
+      <section id="homeScreen" class="screen active glass-panel home-hero">
+        <div class="hero-copy">
+          <h2 class="hero-title">Monitor every room in real time</h2>
+          <p class="hero-subtext">
+            Launch private camera rooms, switch views instantly, and keep your team synced from one professional control center.
+          </p>
+          <div class="hero-trust-row" aria-label="Platform highlights">
+            <span class="hero-chip">Encrypted rooms</span>
+            <span class="hero-chip">Low-latency feeds</span>
+            <span class="hero-chip">Fast role switching</span>
+          </div>
         </div>
 
-        <div class="control-row">
-          <button id="connectRoom">Authorize &amp; Connect</button>
-          <button id="rejoinLast" class="secondary">Rejoin last session</button>
+        <div class="hero-action-card">
+          <h3 class="panel-title">Access Gateway</h3>
+          <p class="panel-text">Enter a room number or full room code to continue.</p>
+
+          <div class="form-grid">
+            <label for="roomId">Room code</label>
+            <input id="roomId" type="password" placeholder="Example: FRONTDOOR:k_xxx" inputmode="text" />
+
+            <label for="cameraName">Camera name</label>
+            <input id="cameraName" placeholder="Camera name (optional)" maxlength="24" />
+
+            <label for="cameraSelect">Camera device</label>
+            <select id="cameraSelect"></select>
+          </div>
+
+          <div class="control-row hero-actions">
+            <button id="connectRoom">Authorize &amp; Connect</button>
+            <button id="rejoinLast" class="secondary">Rejoin last session</button>
+          </div>
         </div>
       </section>
 
       <section id="roleScreen" class="screen glass-panel">
         <h2 class="panel-title">Connection Established</h2>
+        <p class="panel-text">Select how this device should participate in the active room.</p>
         <div class="control-row">
           <button id="startCamera">Deploy as camera</button>
           <button id="startViewer">View camera feeds</button>
@@ -49,6 +68,21 @@
 
       <section id="liveScreen" class="screen glass-panel live-panel">
         <section class="live-section live-header">
+          <div class="live-info-bar">
+            <div class="live-info-group">
+              <span class="live-label">Room</span>
+              <span id="roomInfoChip" class="info-chip">Not connected</span>
+            </div>
+            <div class="live-info-group">
+              <span class="live-label">Role</span>
+              <span id="roleInfoChip" class="info-chip">None</span>
+            </div>
+            <div class="live-info-group">
+              <span class="live-label">Connection</span>
+              <span id="connectionBadge" class="connection-badge">Connecting…</span>
+            </div>
+          </div>
+
           <div class="live-top-row">
             <div class="control-row dense">
               <button id="toggleMute" class="secondary">Mute</button>
@@ -65,13 +99,12 @@
         <section class="live-section live-status-controls">
           <div class="status-row">
             <div id="statusMessage" class="status-text" role="status" aria-live="polite"></div>
-            <div id="connectionBadge" class="connection-badge">Connecting…</div>
           </div>
           <button id="retryPlayback" class="secondary retry-btn">Tap if video doesn't play</button>
         </section>
 
         <section class="live-section live-grid-section">
-          <p id="emptyState" class="empty-state">No cameras connected – deploy a camera.</p>
+          <p id="emptyState" class="empty-state">No cameras connected — deploy a camera to start monitoring.</p>
           <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
         </section>
 

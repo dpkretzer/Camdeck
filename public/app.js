@@ -21,6 +21,8 @@ const stopRecordingBtn = document.getElementById("stopRecording");
 
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
+const roomInfoChip = document.getElementById("roomInfoChip");
+const roleInfoChip = document.getElementById("roleInfoChip");
 const emptyState = document.getElementById("emptyState");
 const sessionTimeline = document.getElementById("sessionTimeline");
 const toastRegion = document.getElementById("toastRegion");
@@ -134,6 +136,17 @@ window.addEventListener("error", (event) => {
   setStatus(`App error: ${detail}`);
 });
 
+
+function updateLiveInfoChips() {
+  if (roomInfoChip) {
+    roomInfoChip.textContent = currentRoomNumber || "Not connected";
+  }
+
+  if (roleInfoChip) {
+    roleInfoChip.textContent = role ? role.toUpperCase() : "None";
+  }
+}
+
 function setConnectionBadge(connected) {
   connectionBadge.textContent = connected ? "Server connection: online" : "Server connection: offline";
   connectionBadge.classList.toggle("online", connected);
@@ -159,6 +172,7 @@ function resetRoomContext() {
   currentRoomCode = "";
   localParticipantId = "";
   activeJoinAttempt += 1;
+  updateLiveInfoChips();
   console.log("[Signal] room state cleared", {
     currentRoomId,
     currentRoomNumber,
@@ -173,6 +187,7 @@ function applyAuthorizedRoom(authorization, source = "unknown") {
   currentRoomNumber = authorization?.roomNumber || "";
   currentAccessKey = authorization?.accessKey || "";
   currentRoomCode = authorization?.roomCode || "";
+  updateLiveInfoChips();
   console.log("[Signal] applyAuthorizedRoom", {
     source,
     roomId: currentRoomId || undefined,
@@ -1026,6 +1041,7 @@ function leaveRoom({ disconnectSocket = false, resetRoomState = false, clearStor
   stopLocalStream();
   localParticipantId = "";
   role = null;
+  updateLiveInfoChips();
 
   if (disconnectSocket && socket.connected) {
     socket.disconnect();
@@ -1102,6 +1118,7 @@ function localMediaConstraints({ includeAudio = false } = {}) {
 
 async function startCamera() {
   role = "camera";
+  updateLiveInfoChips();
   console.log("[WebRTC] startCamera() called", { roomId: currentRoomId });
 
   if (!currentRoomCode) {
@@ -1152,6 +1169,7 @@ async function startCamera() {
     showToast(message, "error", 3200);
     alert(message);
     role = null;
+    updateLiveInfoChips();
     stopLocalStream();
     showScreen(roleScreen);
   } finally {
@@ -1161,6 +1179,7 @@ async function startCamera() {
 
 async function startViewer() {
   role = "viewer";
+  updateLiveInfoChips();
   console.log("[WebRTC] startViewer() called", { roomId: currentRoomId });
 
   if (!currentRoomCode) {
@@ -1190,6 +1209,7 @@ async function startViewer() {
     setStatus(err?.message || "Failed to connect. Please try again.");
     showToast(err?.message || "Viewer connection failed.", "error");
     role = null;
+    updateLiveInfoChips();
     showScreen(roleScreen);
   } finally {
     setButtonBusy(startViewerBtn, false);
@@ -1519,6 +1539,7 @@ rejoinLastBtn.addEventListener("click", async () => {
   currentRoomId = "";
   currentRoomNumber = "";
   currentAccessKey = "";
+  updateLiveInfoChips();
   roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
 
@@ -1549,6 +1570,7 @@ applyLayout();
 applyMotionFollowButton();
 applyLocalControlButtons();
 applyRecordingButtons();
+updateLiveInfoChips();
 setConnectionBadge(socket.connected);
 refreshCameraDevices();
 
