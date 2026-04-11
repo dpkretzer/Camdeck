@@ -13,6 +13,13 @@ const publicDir = path.join(__dirname, 'public');
 // serve static assets from /public
 app.use(express.static(publicDir));
 
+// quiet favicon 404s (served if file exists, otherwise no-content)
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(publicDir, 'favicon.ico'), (err) => {
+    if (err) res.status(204).end();
+  });
+});
+
 // make / load index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
