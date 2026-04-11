@@ -23,6 +23,7 @@ const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
 const emptyState = document.getElementById("emptyState");
 const sessionTimeline = document.getElementById("sessionTimeline");
+const toastRegion = document.getElementById("toastRegion");
 
 const startCameraBtn = document.getElementById("startCamera");
 const startViewerBtn = document.getElementById("startViewer");
@@ -83,14 +84,47 @@ function showScreen(screen) {
     item.classList.toggle("active", item === screen);
     if (item === screen) {
       item.classList.remove("hidden");
+      item.style.display = "block";
     } else {
       item.classList.add("hidden");
+      item.style.display = "none";
     }
   });
 }
 
 function setStatus(message) {
   statusMessage.textContent = message || "";
+}
+
+function showToast(message, type = "info", durationMs = 2600) {
+  if (!toastRegion || !message) return;
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.setAttribute("role", "status");
+  toast.textContent = message;
+  toastRegion.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(6px)";
+    setTimeout(() => toast.remove(), 220);
+  }, durationMs);
+}
+
+function setButtonBusy(button, busy, busyLabel = "Loading...") {
+  if (!button) return;
+  if (busy) {
+    if (!button.dataset.defaultLabel) button.dataset.defaultLabel = button.textContent;
+    button.textContent = busyLabel;
+    button.classList.add("btn-loading");
+    button.disabled = true;
+    return;
+  }
+
+  button.classList.remove("btn-loading");
+  if (button.dataset.defaultLabel) {
+    button.textContent = button.dataset.defaultLabel;
+  }
+  button.disabled = false;
 }
 
 window.addEventListener("error", (event) => {
@@ -913,6 +947,7 @@ async function connectRoom() {
   }
 
   try {
+    setButtonBusy(connectRoomBtn, true, "Authorizing...");
     await ensureSocketConnected();
     const authorization = await authorizeRoom(enteredRoomCode);
     applyAuthorizedRoom(authorization, "connectRoom");
@@ -924,8 +959,12 @@ async function connectRoom() {
         ? `Room ${currentRoomNumber} created. Share code: ${currentRoomCode}`
         : "Access granted. Choose camera or viewer."
     );
+    showToast(authorization.created ? "Room created and connected." : "Connected successfully.", "success");
   } catch (error) {
     setStatus(error?.message || "Room authorization failed.");
+    showToast(error?.message || "Room authorization failed.", "error");
+  } finally {
+    setButtonBusy(connectRoomBtn, false);
   }
 }
 
@@ -964,6 +1003,7 @@ async function startCamera() {
   clearPeersAndVideos();
 
   try {
+    setButtonBusy(startCameraBtn, true, "Starting...");
     await ensureSocketConnected();
     console.log("[WebRTC] Socket connected for camera");
     localStream = await startSelectedCameraStream();
@@ -980,6 +1020,7 @@ async function startCamera() {
     saveSession("camera");
     showScreen(liveScreen);
     setStatus("You are sharing this device as a camera.");
+    showToast("Camera broadcast started.", "success");
     addTimelineEvent("Camera session started.");
     applyLocalControlButtons();
   } catch (err) {
@@ -998,10 +1039,13 @@ async function startCamera() {
     ]);
     const message = mediaErrorNames.has(err?.name) ? getReadableMediaError(err) : err?.message || "Failed to start camera.";
     setStatus(message);
+    showToast(message, "error", 3200);
     alert(message);
     role = null;
     stopLocalStream();
     showScreen(roleScreen);
+  } finally {
+    setButtonBusy(startCameraBtn, false);
   }
 }
 
@@ -1019,6 +1063,7 @@ async function startViewer() {
   stopLocalStream();
 
   try {
+    setButtonBusy(startViewerBtn, true, "Joining...");
     await ensureSocketConnected();
     console.log("[WebRTC] Socket connected for viewer");
     await joinRoomWithRole("viewer");
@@ -1026,14 +1071,18 @@ async function startViewer() {
     saveSession("viewer");
     showScreen(liveScreen);
     setStatus("Viewing cameras in this room.");
+    showToast("Viewer connected.", "success");
     addTimelineEvent("Viewer session started.");
     applyLocalControlButtons();
     updateEmptyState();
   } catch (err) {
     console.error("[WebRTC] Viewer startup failed", err);
     setStatus(err?.message || "Failed to connect. Please try again.");
+    showToast(err?.message || "Viewer connection failed.", "error");
     role = null;
     showScreen(roleScreen);
+  } finally {
+    setButtonBusy(startViewerBtn, false);
   }
 }
 
@@ -1302,6 +1351,7 @@ retryPlaybackBtn.addEventListener("click", () => {
     video.play().catch(() => {});
   });
   setStatus("Retrying video playback.");
+  showToast("Retrying video playback.");
 });
 
 startCameraBtn.addEventListener("click", startCamera);
@@ -1338,11 +1388,13 @@ rejoinLastBtn.addEventListener("click", async () => {
   cameraNameInput.value = previous.cameraName || "";
 
   try {
+    setButtonBusy(rejoinLastBtn, true, "Rejoining...");
     await ensureSocketConnected();
     const authorization = await authorizeRoom(currentRoomCode);
     applyAuthorizedRoom(authorization, "rejoinLast");
     showScreen(roleScreen);
     setStatus("Last session loaded.");
+    showToast("Last session restored.", "success");
 
     if (previous.role === "camera") {
       await startCamera();
@@ -1351,6 +1403,9 @@ rejoinLastBtn.addEventListener("click", async () => {
     }
   } catch (error) {
     setStatus(error?.message || "Could not restore previous session.");
+    showToast(error?.message || "Could not restore previous session.", "error");
+  } finally {
+    setButtonBusy(rejoinLastBtn, false);
   }
 });
 
