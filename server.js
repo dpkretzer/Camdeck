@@ -461,6 +461,37 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('viewer-camera-video-toggle', ({ targetCameraId, enabled }, callback) => {
+    const participant = participantBySocketId.get(socket.id);
+    if (!participant || participant.role !== 'viewer') {
+      if (typeof callback === 'function') callback({ ok: false, error: 'Only viewers can control cameras.' });
+      return;
+    }
+
+    const room = rooms.get(participant.roomId);
+    if (!room) {
+      if (typeof callback === 'function') callback({ ok: false, error: 'Room not found.' });
+      return;
+    }
+
+    const recipientSocketId = [...room.members].find((socketId) => {
+      const member = participantBySocketId.get(socketId);
+      return member?.participantId === targetCameraId && member.role === 'camera';
+    });
+
+    if (!recipientSocketId) {
+      if (typeof callback === 'function') callback({ ok: false, error: 'Camera is not available.' });
+      return;
+    }
+
+    io.to(recipientSocketId).emit('camera-video-command', {
+      enabled: enabled !== false,
+      requestedBy: participant.label || 'viewer'
+    });
+
+    if (typeof callback === 'function') callback({ ok: true });
+  });
+
   socket.on('leave-room', removeSocketFromRoom);
 
   socket.on('disconnect', () => {

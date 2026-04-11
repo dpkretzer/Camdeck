@@ -46,12 +46,14 @@ let recordingSourceLabel = "";
 let availableCameraDevices = [];
 let selectedCameraDeviceId = "";
 let activeJoinAttempt = 0;
+let activeCameraTileId = "";
 const peers = new Map();
 const cameraNames = new Map();
 const cameraVideoStates = new Map();
 const tileMediaStates = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
+const pendingRemoteVideoToggle = new Set();
 
 function normalizeRoomCode(value) {
   const trimmed = value.trim();
@@ -212,6 +214,40 @@ function applyLayout() {
   toggleLayoutBtn.textContent = focusMode ? "Grid layout" : "Focus layout";
 }
 
+function applyActiveCameraLayout() {
+  const cards = Array.from(remoteVideos.querySelectorAll("[data-participant-tile]"));
+  if (!cards.length) {
+    activeCameraTileId = "";
+    return;
+  }
+
+  const hasActive = cards.some((card) => card.id === `card-${activeCameraTileId}`);
+  if (!hasActive) {
+    activeCameraTileId = cards[0].id.replace("card-", "");
+  }
+
+  cards.forEach((card) => {
+    const cardId = card.id.replace("card-", "");
+    const isActive = cardId === activeCameraTileId;
+    card.classList.toggle("active-camera", isActive);
+    card.classList.toggle("thumbnail-camera", !isActive);
+  });
+
+  const activeCard = document.getElementById(`card-${activeCameraTileId}`);
+  if (activeCard && remoteVideos.firstElementChild !== activeCard) {
+    remoteVideos.prepend(activeCard);
+  }
+}
+
+function setActiveCameraTile(id, { scrollIntoView = true } = {}) {
+  if (!id || !document.getElementById(`card-${id}`)) return;
+  activeCameraTileId = id;
+  applyActiveCameraLayout();
+  if (scrollIntoView) {
+    document.getElementById(`card-${id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
 function applyMotionFollowButton() {
   toggleMotionFollowBtn.textContent = `Motion follow: ${motionFollowEnabled ? "On" : "Off"}`;
 }
@@ -243,11 +279,12 @@ function applyLocalControlButtons() {
 }
 
 function applyRecordingButtons() {
+  const recorderSupported = typeof MediaRecorder !== "undefined";
   const isRecording = mediaRecorder && mediaRecorder.state === "recording";
-  startRecordingBtn.disabled = isRecording;
-  stopRecordingBtn.disabled = !isRecording;
-  startRecordingBtn.classList.toggle("opacity-50", isRecording);
-  stopRecordingBtn.classList.toggle("opacity-50", !isRecording);
+  startRecordingBtn.disabled = !recorderSupported || isRecording;
+  stopRecordingBtn.disabled = !recorderSupported || !isRecording;
+  startRecordingBtn.classList.toggle("opacity-50", !recorderSupported || isRecording);
+  stopRecordingBtn.classList.toggle("opacity-50", !recorderSupported || !isRecording);
 }
 
 function updateEmptyState() {
@@ -394,6 +431,8 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   card.className = `relative overflow-hidden rounded-2xl border bg-slate-900/80 p-3 shadow-lg ${
     isLocal ? "border-cyan-300/70 ring-1 ring-cyan-300/50" : "border-white/10"
   }`;
+  card.classList.add("video-card-clickable");
+  card.tabIndex = 0;
 
   const mediaFrame = document.createElement("div");
   mediaFrame.className = "relative aspect-video overflow-hidden rounded-xl bg-black/90";
@@ -442,11 +481,18 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   videoToggleBtn.id = `video-toggle-${id}`;
   videoToggleBtn.className = "secondary px-2 py-1 text-[10px]";
   videoToggleBtn.textContent = "Camera off";
-  videoToggleBtn.disabled = !isLocal || role !== "camera";
+  const canToggleLocal = isLocal && role === "camera";
+  const canToggleRemote = !isLocal && role === "viewer";
+  videoToggleBtn.disabled = !(canToggleLocal || canToggleRemote);
   videoToggleBtn.classList.toggle("opacity-50", videoToggleBtn.disabled);
-  videoToggleBtn.addEventListener("click", () => {
+  videoToggleBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
     if (id === "local") {
       toggleCamera();
+      return;
+    }
+    if (role === "viewer") {
+      requestViewerCameraToggle(id);
     }
   });
   tileControls.append(videoToggleBtn);
@@ -461,7 +507,18 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   };
 
   video.addEventListener("canplay", handleCanPlay);
+  card.addEventListener("click", () => setActiveCameraTile(id, { scrollIntoView: false }));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setActiveCameraTile(id, { scrollIntoView: false });
+    }
+  });
   remoteVideos.appendChild(card);
+  if (!activeCameraTileId) {
+    activeCameraTileId = id;
+  }
+  applyActiveCameraLayout();
   return card;
 }
 
@@ -502,6 +559,37 @@ function setTileVideoToggleButton(id, camOn) {
   toggleBtn.textContent = camOn ? "Camera off" : "Camera on";
 }
 
+function requestViewerCameraToggle(id) {
+  if (role !== "viewer" || !id || pendingRemoteVideoToggle.has(id)) return;
+
+  const toggleBtn = document.getElementById(`video-toggle-${id}`);
+  const currentlyEnabled = cameraVideoStates.get(id) !== false;
+  const nextEnabled = !currentlyEnabled;
+
+  pendingRemoteVideoToggle.add(id);
+  if (toggleBtn) {
+    toggleBtn.disabled = true;
+    toggleBtn.classList.add("opacity-50");
+  }
+
+  socket.emit("viewer-camera-video-toggle", { targetCameraId: id, enabled: nextEnabled }, (response) => {
+    pendingRemoteVideoToggle.delete(id);
+    if (toggleBtn) {
+      toggleBtn.disabled = false;
+      toggleBtn.classList.remove("opacity-50");
+    }
+
+    if (!response?.ok) {
+      const errorMessage = response?.error || "Could not change camera state.";
+      setStatus(errorMessage);
+      showToast(errorMessage, "error");
+      return;
+    }
+
+    setStatus(`Requested ${cameraNames.get(id) || "camera"} ${nextEnabled ? "on" : "off"}.`);
+  });
+}
+
 function clearPeersAndVideos() {
   peers.forEach((pc) => pc.close());
   peers.clear();
@@ -512,6 +600,7 @@ function clearPeersAndVideos() {
   motionWatchers.clear();
   lastMotionLogAt.clear();
   localPeerTile = null;
+  activeCameraTileId = "";
   remoteVideos.innerHTML = "";
   sessionTimeline.innerHTML = "";
   updateEmptyState();
@@ -571,8 +660,7 @@ function detectMotionOnVideo(id, videoEl) {
     if (motionFollowEnabled) {
       layoutMode = "focus";
       applyLayout();
-      remoteVideos.prepend(card);
-      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setActiveCameraTile(id);
     }
   }, 900);
 
@@ -636,6 +724,7 @@ function mountLocalTile(stream, cameraLabel) {
     setTilePlaceholder("local", true, "Preview unavailable");
     setStatus("Camera stream started, but preview autoplay was blocked. Tap the video to start playback.");
   });
+  applyActiveCameraLayout();
 }
 
 function stopLocalStream() {
@@ -803,26 +892,40 @@ async function switchCameraStream() {
 }
 
 function getViewerRecordableStream() {
-  const videos = Array.from(remoteVideos.querySelectorAll("video"));
-  for (const video of videos) {
-    const stream = video.srcObject;
+  const prioritizedTileIds = [activeCameraTileId, ...Array.from(remoteVideos.querySelectorAll("[data-participant-tile]")).map((card) => card.id.replace("card-", ""))].filter(Boolean);
+  const checked = new Set();
+
+  for (const tileId of prioritizedTileIds) {
+    if (checked.has(tileId)) continue;
+    checked.add(tileId);
+
+    const video = document.querySelector(`#card-${tileId} video`);
+    const stream = video?.srcObject;
     if (!(stream instanceof MediaStream)) continue;
     if (stream.getVideoTracks().length > 0) {
-      return stream;
+      return { stream, tileId };
     }
   }
+
   return null;
 }
 
 function resolveRecordingTarget() {
+  if (typeof MediaRecorder === "undefined") {
+    return null;
+  }
+
   if (role === "camera" && localStream) {
     return { stream: localStream, label: "camera-local-stream" };
   }
 
   if (role === "viewer") {
-    const remoteStream = getViewerRecordableStream();
-    if (remoteStream) {
-      return { stream: remoteStream, label: "viewer-remote-stream" };
+    const remoteTarget = getViewerRecordableStream();
+    if (remoteTarget?.stream) {
+      return {
+        stream: remoteTarget.stream,
+        label: `viewer-${remoteTarget.tileId || "remote-stream"}`
+      };
     }
   }
 
@@ -842,7 +945,12 @@ function startRecording() {
 
   const target = resolveRecordingTarget();
   if (!target?.stream) {
-    setStatus("No stream available to record yet.");
+    const message =
+      typeof MediaRecorder === "undefined"
+        ? "Recording is not supported in this browser."
+        : "No stream available to record yet.";
+    setStatus(message);
+    showToast(message, "error");
     return;
   }
 
@@ -888,6 +996,8 @@ function startRecording() {
       totalBytes: blob.size
     });
     setStatus(`Recording saved: ${fileName}`);
+    showToast(`Recording saved: ${fileName}`, "success");
+    addTimelineEvent(`Recording saved (${recordingSourceLabel}).`);
 
     mediaRecorder = null;
     recordingStream = null;
@@ -1182,6 +1292,27 @@ function toggleCamera() {
   setStatus(videoTrack.enabled ? "Camera enabled." : "Camera disabled.");
 }
 
+socket.on("camera-video-command", ({ enabled, requestedBy }) => {
+  if (role !== "camera" || !localStream) return;
+
+  const [videoTrack] = localStream.getVideoTracks();
+  if (!videoTrack) return;
+
+  const nextEnabled = enabled !== false;
+  if (videoTrack.enabled === nextEnabled) return;
+
+  videoTrack.enabled = nextEnabled;
+  if (localParticipantId) {
+    cameraVideoStates.set(localParticipantId, nextEnabled);
+  }
+  setTileMediaBadges("local", localStream.getAudioTracks()[0]?.enabled ?? false, nextEnabled);
+  setTileVideoToggleButton("local", nextEnabled);
+  setTilePlaceholder("local", !nextEnabled, "Camera is off");
+  applyLocalControlButtons();
+  socket.emit("camera-video-state", { enabled: nextEnabled });
+  setStatus(`Camera ${nextEnabled ? "enabled" : "disabled"}${requestedBy ? ` by ${requestedBy}` : ""}.`);
+});
+
 socket.on("session-authorized", ({ roomId, roomNumber, participantId, accessKey, roomCode }) => {
   if (!role) {
     console.warn("[Signal] Ignoring session-authorized with no active role", { roomId, participantId });
@@ -1261,6 +1392,10 @@ socket.on("camera-left", ({ id }) => {
   lastMotionLogAt.delete(id);
   const card = document.getElementById(`card-${id}`);
   if (card) card.remove();
+  if (activeCameraTileId === id) {
+    activeCameraTileId = "";
+  }
+  applyActiveCameraLayout();
   addTimelineEvent("A camera disconnected.");
   updateEmptyState();
 });
