@@ -21,7 +21,6 @@ const stopRecordingBtn = document.getElementById("stopRecording");
 
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
-const roomInfoChip = document.getElementById("roomInfoChip");
 const roleInfoChip = document.getElementById("roleInfoChip");
 const emptyState = document.getElementById("emptyState");
 const sessionTimeline = document.getElementById("sessionTimeline");
@@ -138,10 +137,6 @@ window.addEventListener("error", (event) => {
 
 
 function updateLiveInfoChips() {
-  if (roomInfoChip) {
-    roomInfoChip.textContent = currentRoomNumber || "Not connected";
-  }
-
   if (roleInfoChip) {
     roleInfoChip.textContent = role ? role.toUpperCase() : "None";
   }
