@@ -278,11 +278,12 @@ function applyLocalControlButtons() {
 }
 
 function applyRecordingButtons() {
+  const recorderSupported = typeof MediaRecorder !== "undefined";
   const isRecording = mediaRecorder && mediaRecorder.state === "recording";
-  startRecordingBtn.disabled = isRecording;
-  stopRecordingBtn.disabled = !isRecording;
-  startRecordingBtn.classList.toggle("opacity-50", isRecording);
-  stopRecordingBtn.classList.toggle("opacity-50", !isRecording);
+  startRecordingBtn.disabled = !recorderSupported || isRecording;
+  stopRecordingBtn.disabled = !recorderSupported || !isRecording;
+  startRecordingBtn.classList.toggle("opacity-50", !recorderSupported || isRecording);
+  stopRecordingBtn.classList.toggle("opacity-50", !recorderSupported || !isRecording);
 }
 
 function updateEmptyState() {
@@ -852,26 +853,40 @@ async function switchCameraStream() {
 }
 
 function getViewerRecordableStream() {
-  const videos = Array.from(remoteVideos.querySelectorAll("video"));
-  for (const video of videos) {
-    const stream = video.srcObject;
+  const prioritizedTileIds = [activeCameraTileId, ...Array.from(remoteVideos.querySelectorAll("[data-participant-tile]")).map((card) => card.id.replace("card-", ""))].filter(Boolean);
+  const checked = new Set();
+
+  for (const tileId of prioritizedTileIds) {
+    if (checked.has(tileId)) continue;
+    checked.add(tileId);
+
+    const video = document.querySelector(`#card-${tileId} video`);
+    const stream = video?.srcObject;
     if (!(stream instanceof MediaStream)) continue;
     if (stream.getVideoTracks().length > 0) {
-      return stream;
+      return { stream, tileId };
     }
   }
+
   return null;
 }
 
 function resolveRecordingTarget() {
+  if (typeof MediaRecorder === "undefined") {
+    return null;
+  }
+
   if (role === "camera" && localStream) {
     return { stream: localStream, label: "camera-local-stream" };
   }
 
   if (role === "viewer") {
-    const remoteStream = getViewerRecordableStream();
-    if (remoteStream) {
-      return { stream: remoteStream, label: "viewer-remote-stream" };
+    const remoteTarget = getViewerRecordableStream();
+    if (remoteTarget?.stream) {
+      return {
+        stream: remoteTarget.stream,
+        label: `viewer-${remoteTarget.tileId || "remote-stream"}`
+      };
     }
   }
 
@@ -891,7 +906,12 @@ function startRecording() {
 
   const target = resolveRecordingTarget();
   if (!target?.stream) {
-    setStatus("No stream available to record yet.");
+    const message =
+      typeof MediaRecorder === "undefined"
+        ? "Recording is not supported in this browser."
+        : "No stream available to record yet.";
+    setStatus(message);
+    showToast(message, "error");
     return;
   }
 
@@ -937,6 +957,8 @@ function startRecording() {
       totalBytes: blob.size
     });
     setStatus(`Recording saved: ${fileName}`);
+    showToast(`Recording saved: ${fileName}`, "success");
+    addTimelineEvent(`Recording saved (${recordingSourceLabel}).`);
 
     mediaRecorder = null;
     recordingStream = null;
