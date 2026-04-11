@@ -760,7 +760,7 @@ function disconnectAndReturnToRoleScreen() {
 }
 
 async function connectRoom() {
-  const enteredRoomCode = roomId();
+  const enteredRoomCode = roomId().toUpperCase();
 
   if (!validateRoomCodeInput(enteredRoomCode)) {
     alert("Enter room number (e.g. FRONTDOOR) or full room code (e.g. FRONTDOOR:k_xxx).");
@@ -1180,7 +1180,7 @@ rejoinLastBtn.addEventListener("click", async () => {
     return;
   }
 
-  currentRoomCode = normalizeRoomCode(previous.roomCode);
+  currentRoomCode = normalizeRoomCode(previous.roomCode).toUpperCase();
   currentRoomId = "";
   roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
