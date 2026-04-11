@@ -216,33 +216,33 @@ io.on('connection', (socket) => {
     const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
     const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
     const providedAccessKey = normalizedAccessKey || parsedAccessKey;
+
     const authorizedRoomId = socket.data.authorizedRoomId;
-
-    const rejectJoin = (message) => {
-      if (typeof callback === 'function') {
-        callback({ ok: false, error: message });
-      }
-    };
-
     let room = null;
 
-    // 1) If roomId was provided, it must resolve to a room.
+    // Prefer explicit credentials from payload. Fall back to socket-scoped authorization.
     if (normalizedRequestedRoomId) {
       room = rooms.get(normalizedRequestedRoomId) || null;
-      if (!room) {
-        rejectJoin('Unauthorized room access.');
-        return;
-      }
     }
 
-    // 2) If no roomId, resolve by key when present.
     if (!room && providedAccessKey) {
       room = getRoomByAccessKey(providedAccessKey) || null;
     }
 
-    // 3) Backward-compatible fallback to prior socket authorization.
     if (!room && authorizedRoomId) {
       room = rooms.get(authorizedRoomId) || null;
+    }
+
+    if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
+      room = null;
+    }
+
+    if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
+      room = null;
+    }
+
+    if (room && parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
+      room = null;
     }
 
     console.log('[Signal] join-room request', {
