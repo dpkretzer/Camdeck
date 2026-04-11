@@ -65,8 +65,17 @@ h1 {
   font-weight: 600;
 }
 
-.screen { display: none; }
-.screen.active { display: block; }
+.screen {
+  display: none;
+  opacity: 0;
+  transform: translateY(8px) scale(0.995);
+}
+.screen.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  animation: screenFadeIn 220ms ease;
+}
 
 .glass-panel {
   border: 1px solid var(--panel-border);
@@ -146,12 +155,40 @@ button {
   font-weight: 650;
   background: linear-gradient(180deg, rgba(24, 90, 132, 0.42), rgba(15, 56, 84, 0.5));
   box-shadow: inset 0 0 0 1px rgba(68, 181, 255, 0.12);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
 }
 
 button:hover {
   border-color: rgba(112, 212, 255, 0.78);
   box-shadow: inset 0 0 0 1px rgba(108, 212, 255, 0.22);
   background: linear-gradient(180deg, rgba(28, 108, 156, 0.48), rgba(17, 66, 98, 0.54));
+}
+button:active { transform: translateY(1px); }
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+}
+.btn-loading::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(180, 223, 255, 0.3);
+  border-top-color: rgba(180, 223, 255, 0.95);
+  animation: spin 700ms linear infinite;
 }
 
 button.secondary { background: linear-gradient(180deg, rgba(19, 37, 58, 0.8), rgba(13, 27, 44, 0.85)); }
@@ -215,6 +252,13 @@ button.danger { background: linear-gradient(180deg, rgba(89, 27, 41, 0.78), rgba
   background: linear-gradient(180deg, rgba(6, 15, 28, 0.8), rgba(4, 11, 21, 0.82)) !important;
   padding: 7px !important;
   box-shadow: inset 0 0 0 1px rgba(102, 185, 238, 0.05);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+#remoteVideos article:hover,
+.videoCard:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 0 0 1px rgba(102, 185, 238, 0.12), 0 10px 20px rgba(0, 0, 0, 0.25);
 }
 
 #remoteVideos .aspect-video,
@@ -296,6 +340,57 @@ button.danger { background: linear-gradient(180deg, rgba(89, 27, 41, 0.78), rgba
 .retry-btn {
   margin-top: 8px;
   max-width: 260px;
+}
+
+.toast-region {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: grid;
+  gap: 8px;
+  width: min(92vw, 340px);
+}
+
+.toast {
+  border: 1px solid rgba(95, 181, 237, 0.35);
+  background: rgba(6, 16, 29, 0.92);
+  color: #d5edff;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: toastIn 220ms ease;
+}
+
+.toast.success { border-color: rgba(84, 210, 145, 0.45); }
+.toast.error { border-color: rgba(231, 95, 95, 0.5); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes screenFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 640px) {
