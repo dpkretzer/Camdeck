@@ -143,9 +143,12 @@ function applyMotionFollowButton() {
 
 function applyLocalControlButtons() {
   const controlsEnabled = role === "camera" && !!localStream;
-  toggleMuteBtn.disabled = !controlsEnabled;
+  const hasAudioTrack = Boolean(localStream?.getAudioTracks?.().length);
+  const muteEnabled = controlsEnabled && hasAudioTrack;
+
+  toggleMuteBtn.disabled = !muteEnabled;
   toggleCameraBtn.disabled = !controlsEnabled;
-  toggleMuteBtn.classList.toggle("opacity-50", !controlsEnabled);
+  toggleMuteBtn.classList.toggle("opacity-50", !muteEnabled);
   toggleCameraBtn.classList.toggle("opacity-50", !controlsEnabled);
 
   if (!localStream) {
@@ -156,7 +159,11 @@ function applyLocalControlButtons() {
 
   const [audioTrack] = localStream.getAudioTracks();
   const [videoTrack] = localStream.getVideoTracks();
-  toggleMuteBtn.textContent = audioTrack && audioTrack.enabled ? "Mute" : "Unmute";
+  if (!audioTrack) {
+    toggleMuteBtn.textContent = "Mute unavailable";
+  } else {
+    toggleMuteBtn.textContent = audioTrack.enabled ? "Mute" : "Unmute";
+  }
   toggleCameraBtn.textContent = videoTrack && videoTrack.enabled ? "Camera off" : "Camera on";
 }
 
@@ -631,7 +638,7 @@ async function startSelectedCameraStream() {
   selectedCameraDeviceId = cameraDeviceId();
   console.log("[MediaDevices] selected deviceId", selectedCameraDeviceId || "default");
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(localMediaConstraints({ includeAudio: false }));
+    const stream = await navigator.mediaDevices.getUserMedia(localMediaConstraints({ includeAudio: true }));
     console.log("[MediaDevices] stream started", {
       deviceId: selectedCameraDeviceId || "default",
       audioTracks: stream.getAudioTracks().length,
@@ -647,11 +654,15 @@ async function startSelectedCameraStream() {
     });
     const recoverableDeviceError = selectedCameraDeviceId && (error?.name === "OverconstrainedError" || error?.name === "NotFoundError");
     if (!recoverableDeviceError) {
-      console.warn("[MediaDevices] retrying with simple video-only constraints", {
+      console.warn("[MediaDevices] retrying with simpler constraints", {
         name: error?.name,
         message: error?.message
       });
-      return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      try {
+        return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch {
+        return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
     }
 
     console.warn("[MediaDevices] selected device failed, retrying default camera", {
@@ -662,7 +673,11 @@ async function startSelectedCameraStream() {
 
     selectedCameraDeviceId = "";
     cameraSelectInput.value = "";
-    return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    try {
+      return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch {
+      return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
   }
 }
 
