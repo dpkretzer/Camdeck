@@ -176,7 +176,8 @@ function roomId() {
 }
 
 function cameraName() {
-  return cameraNameInput.value.trim().slice(0, 24);
+  // Username/camera-name entry was removed from login; keep optional support if field exists.
+  return cameraNameInput?.value?.trim?.().slice(0, 24) || "";
 }
 
 function cameraDeviceId() {
@@ -1518,7 +1519,7 @@ roomIdInput.addEventListener("keydown", (event) => {
 changeRoomBtn.addEventListener("click", () => {
   leaveRoom({ disconnectSocket: true, resetRoomState: true, clearStoredSession: true, reason: "change_room" });
   roomIdInput.value = "";
-  cameraNameInput.value = "";
+  if (cameraNameInput) cameraNameInput.value = "";
   showScreen(homeScreen);
   setStatus("");
 });
@@ -1572,7 +1573,7 @@ rejoinLastBtn.addEventListener("click", async () => {
   currentAccessKey = "";
   updateLiveInfoChips();
   roomIdInput.value = "";
-  cameraNameInput.value = previous.cameraName || "";
+  if (cameraNameInput) cameraNameInput.value = previous.cameraName || "";
 
   try {
     setButtonBusy(rejoinLastBtn, true, "Rejoining...");
