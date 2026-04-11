@@ -218,13 +218,27 @@ function ensureSocketConnected() {
 
 function joinRoomWithRole(roleName) {
   const [videoTrack] = localStream?.getVideoTracks?.() || [];
+  const authPayload = {
+    roomId: currentRoomId || undefined,
+    accessKey: currentAccessKey || undefined,
+    roomCode: currentRoomCode || undefined
+  };
+
+  console.log("[Signal] join-room auth payload", {
+    role: roleName,
+    roomId: authPayload.roomId,
+    hasAccessKey: Boolean(authPayload.accessKey),
+    hasRoomCode: Boolean(authPayload.roomCode)
+  });
+
   return new Promise((resolve, reject) => {
     socket.emit(
       "join-room",
       {
         role: roleName,
         name: roleName === "camera" ? cameraName() : "",
-        videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined
+        videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined,
+        ...authPayload
       },
       (response) => {
         if (!response || !response.ok) {
