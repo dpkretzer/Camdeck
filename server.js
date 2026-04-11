@@ -225,45 +225,55 @@ io.on('connection', (socket) => {
       }
     }
 
-    let room = null;
+    console.log('[Signal] join-room request', {
+      socketId: socket.id,
+      authorizedRoomId,
+      requestedRoomId: normalizedRequestedRoomId || undefined,
+      requestedRoomNumber: parsedRoomNumber || normalizedRequestedRoomNumber || undefined,
+      role,
+      name,
+      label,
+      hasAccessKey: Boolean(providedAccessKey),
+      hasRoomCode: Boolean(roomCode)
+    });
 
-    // 1) Prefer prior authorization for this socket.
+    let room = null;
+    let resolvedBy = 'none';
+
     if (authorizedRoomId) {
       room = rooms.get(authorizedRoomId) || null;
+      if (room) resolvedBy = 'authorizedRoomId';
     }
 
-    // 2) Resolve requestedRoomId as either real room id or room number -> real room id.
     if (!room && normalizedRequestedRoomId) {
-      const requestedAsRoomId = rooms.get(normalizedRequestedRoomId) || null;
-      if (requestedAsRoomId) {
-        room = requestedAsRoomId;
-      } else if (normalizedRequestedRoomNumber) {
-        const resolvedRoomId = roomByNumber.get(normalizedRequestedRoomNumber);
-        if (resolvedRoomId) {
-          room = rooms.get(resolvedRoomId) || null;
+      room = rooms.get(normalizedRequestedRoomId) || null;
+      if (room) {
+        resolvedBy = 'requestedRoomId';
+      } else {
+        const mappedRoomId = roomByNumber.get(normalizedRequestedRoomNumber);
+        if (mappedRoomId) {
+          room = rooms.get(mappedRoomId) || null;
+          if (room) resolvedBy = 'requestedRoomNumber';
         }
       }
     }
 
-    // 3) Resolve parsed room number from roomCode -> real room id.
     if (!room && parsedRoomNumber) {
-      const resolvedRoomId = roomByNumber.get(parsedRoomNumber);
-      if (resolvedRoomId) {
-        room = rooms.get(resolvedRoomId) || null;
+      const mappedRoomId = roomByNumber.get(parsedRoomNumber);
+      if (mappedRoomId) {
+        room = rooms.get(mappedRoomId) || null;
+        if (room) resolvedBy = 'roomCode.roomNumber';
       }
     }
 
-    // 4) If still no room, try access key.
     if (!room && providedAccessKey) {
       room = getRoomByAccessKey(providedAccessKey) || null;
+      if (room) resolvedBy = 'accessKey';
     }
 
-    // 5) Enforce consistency checks.
     if (room && normalizedRequestedRoomId) {
       const requestedMatchesRoom = room.id === normalizedRequestedRoomId || room.roomNumber === normalizedRequestedRoomNumber;
-      if (!requestedMatchesRoom) {
-        room = null;
-      }
+      if (!requestedMatchesRoom) room = null;
     }
 
     if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
@@ -274,31 +284,17 @@ io.on('connection', (socket) => {
       room = null;
     }
 
-    console.log('[Signal] join-room request', {
-      socketId: socket.id,
-      authorizedRoomId,
-      requestedRoomId: normalizedRequestedRoomId || undefined,
-      role,
-      name,
-      label,
-      hasAccessKey: Boolean(providedAccessKey),
-      hasRoomCode: Boolean(roomCode)
-    });
-
     if (!room) {
       rejectJoin('Room not found.');
       return;
     }
 
     if (role !== 'camera' && role !== 'viewer') {
-      if (typeof callback === 'function') {
-        callback({ ok: false, error: 'Invalid role.' });
-      }
+      rejectJoin('Invalid role.');
       return;
     }
 
     removeSocketFromRoom();
-
     socket.data.authorizedRoomId = room.id;
 
     const participantId = buildParticipantId();
@@ -316,7 +312,20 @@ io.on('connection', (socket) => {
     if (role === 'camera') room.cameras.add(participantId);
     if (role === 'viewer') room.viewers.add(participantId);
 
+    // Always join by persistent room.id so users resolving by roomId/roomNumber end up in the same room.
     socket.join(room.id);
+
+    console.log('[Signal] join-room success', {
+      socketId: socket.id,
+      participantId,
+      role,
+      roomId: room.id,
+      roomNumber: room.roomNumber,
+      resolvedBy,
+      members: room.members.size,
+      cameras: room.cameras.size,
+      viewers: room.viewers.size
+    });
 
     socket.emit('session-authorized', {
       roomNumber: room.roomNumber,
@@ -340,7 +349,14 @@ io.on('connection', (socket) => {
     }
 
     if (typeof callback === 'function') {
-      callback({ ok: true });
+      callback({
+        ok: true,
+        room: {
+          id: room.id,
+          roomNumber: room.roomNumber,
+          accessKey: room.accessKey
+        }
+      });
     }
   });
 
