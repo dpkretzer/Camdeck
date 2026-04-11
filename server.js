@@ -226,6 +226,12 @@ io.on('connection', (socket) => {
 
     let room = null;
 
+    // 1) Prefer prior authorization from authorize-room (per-socket protection).
+    if (priorAuthorizedRoomId) {
+      room = rooms.get(priorAuthorizedRoomId) || null;
+    }
+
+    // 2) If not previously authorized, resolve by access key (explicit or from roomCode).
     // 1) If roomId was provided, it must resolve to a room.
     if (normalizedRequestedRoomId) {
       room = rooms.get(normalizedRequestedRoomId) || null;
