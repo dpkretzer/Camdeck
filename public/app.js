@@ -55,6 +55,21 @@ const tileMediaStates = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 const pendingRemoteVideoToggle = new Set();
+let cameraController = null;
+
+function isViewCameraFeedsPageActive() {
+  const liveVisible = liveScreen?.classList.contains("active");
+  return Boolean(window.viewerPage?.isViewerFeedsPage?.() && liveVisible && role);
+}
+
+function syncCameraSocketLifecycle() {
+  if (!cameraController) return;
+  if (isViewCameraFeedsPageActive()) {
+    cameraController.init();
+  } else {
+    cameraController.destroy();
+  }
+}
 
 function normalizeRoomCode(value) {
   const trimmed = value.trim();
@@ -93,6 +108,14 @@ function showScreen(screen) {
       item.style.display = "none";
     }
   });
+
+  // Keep URL/page flag in sync so camera sockets are only active on /viewer while live is visible.
+  if (screen === liveScreen) {
+    window.viewerPage?.enterViewerFeedsPage?.();
+  } else {
+    window.viewerPage?.leaveViewerFeedsPage?.();
+  }
+  syncCameraSocketLifecycle();
 }
 
 function setStatus(message) {
@@ -380,6 +403,7 @@ function joinRoomWithRole(roleName) {
           role: roleName,
           name: roleName === "camera" ? cameraName() : "",
           videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined,
+          pageContext: window.viewerPage?.isViewerFeedsPage?.() ? "viewer-feeds" : "default",
           ...authPayload
         },
         (response) => {
@@ -582,7 +606,7 @@ function requestViewerCameraToggle(id) {
     toggleBtn.classList.add("opacity-50");
   }
 
-  socket.emit("viewer-camera-video-toggle", { targetCameraId: id, enabled: nextEnabled }, (response) => {
+  cameraController.emit("viewer-camera-video-toggle", { targetCameraId: id, enabled: nextEnabled }, (response) => {
     pendingRemoteVideoToggle.delete(id);
     if (toggleBtn) {
       toggleBtn.disabled = false;
@@ -1037,6 +1061,7 @@ function leaveRoom({ disconnectSocket = false, resetRoomState = false, clearStor
   localParticipantId = "";
   role = null;
   updateLiveInfoChips();
+  syncCameraSocketLifecycle();
 
   if (disconnectSocket && socket.connected) {
     socket.disconnect();
@@ -1114,6 +1139,7 @@ function localMediaConstraints({ includeAudio = false } = {}) {
 async function startCamera() {
   role = "camera";
   updateLiveInfoChips();
+  syncCameraSocketLifecycle();
   console.log("[WebRTC] startCamera() called", { roomId: currentRoomId });
 
   if (!currentRoomCode) {
@@ -1136,11 +1162,12 @@ async function startCamera() {
     await refreshCameraDevices();
 
     mountLocalTile(localStream, cameraName() || "You (camera)");
+    // Enter /viewer before joining so camera socket listeners can initialize only on the live feed page.
+    showScreen(liveScreen);
     await joinRoomWithRole("camera");
     console.log("[WebRTC] Camera joined room", { roomId: currentRoomId });
 
     saveSession("camera");
-    showScreen(liveScreen);
     setStatus("You are sharing this device as a camera.");
     showToast("Camera broadcast started.", "success");
     addTimelineEvent("Camera session started.");
@@ -1165,6 +1192,7 @@ async function startCamera() {
     alert(message);
     role = null;
     updateLiveInfoChips();
+    syncCameraSocketLifecycle();
     stopLocalStream();
     showScreen(roleScreen);
   } finally {
@@ -1175,6 +1203,7 @@ async function startCamera() {
 async function startViewer() {
   role = "viewer";
   updateLiveInfoChips();
+  syncCameraSocketLifecycle();
   console.log("[WebRTC] startViewer() called", { roomId: currentRoomId });
 
   if (!currentRoomCode) {
@@ -1190,10 +1219,11 @@ async function startViewer() {
     setButtonBusy(startViewerBtn, true, "Joining...");
     await ensureSocketConnected();
     console.log("[WebRTC] Socket connected for viewer");
+    // Enter /viewer before joining so viewer-only camera events can be subscribed safely.
+    showScreen(liveScreen);
     await joinRoomWithRole("viewer");
     console.log("[WebRTC] Viewer joined room", { roomId: currentRoomId });
     saveSession("viewer");
-    showScreen(liveScreen);
     setStatus("Viewing cameras in this room.");
     showToast("Viewer connected.", "success");
     addTimelineEvent("Viewer session started.");
@@ -1205,6 +1235,7 @@ async function startViewer() {
     showToast(err?.message || "Viewer connection failed.", "error");
     role = null;
     updateLiveInfoChips();
+    syncCameraSocketLifecycle();
     showScreen(roleScreen);
   } finally {
     setButtonBusy(startViewerBtn, false);
@@ -1223,7 +1254,7 @@ function makePeer(targetId, initiator) {
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       console.log("[WebRTC] Sending ICE candidate", { targetId });
-      socket.emit("signal", {
+      cameraController.emit("signal", {
         target: targetId,
         data: { type: "candidate", candidate: event.candidate }
       });
@@ -1259,7 +1290,7 @@ function makePeer(targetId, initiator) {
       .then((offer) => pc.setLocalDescription(offer))
       .then(() => {
         console.log("[WebRTC] Sending offer", { targetId });
-        socket.emit("signal", {
+        cameraController.emit("signal", {
           target: targetId,
           data: { type: "offer", sdp: pc.localDescription }
         });
@@ -1303,135 +1334,140 @@ function toggleCamera() {
   setTileVideoToggleButton("local", videoTrack.enabled);
   setTilePlaceholder("local", !videoTrack.enabled, "Camera is off");
   applyLocalControlButtons();
-  socket.emit("camera-video-state", { enabled: videoTrack.enabled });
+  cameraController.emit("camera-video-state", { enabled: videoTrack.enabled });
   setStatus(videoTrack.enabled ? "Camera enabled." : "Camera disabled.");
 }
 
-socket.on("camera-video-command", ({ enabled, requestedBy }) => {
-  if (role !== "camera" || !localStream) return;
+function setupCameraController() {
+  // Camera-related listeners are now attached/detached dynamically based on /viewer + live page state.
+  cameraController = window.createCameraController({
+    socket,
+    canUseCameraSockets: isViewCameraFeedsPageActive,
+    handlers: {
+      onCameraVideoCommand: ({ enabled, requestedBy }) => {
+        if (role !== "camera" || !localStream) return;
 
-  const [videoTrack] = localStream.getVideoTracks();
-  if (!videoTrack) return;
+        const [videoTrack] = localStream.getVideoTracks();
+        if (!videoTrack) return;
 
-  const nextEnabled = enabled !== false;
-  if (videoTrack.enabled === nextEnabled) return;
+        const nextEnabled = enabled !== false;
+        if (videoTrack.enabled === nextEnabled) return;
 
-  videoTrack.enabled = nextEnabled;
-  if (localParticipantId) {
-    cameraVideoStates.set(localParticipantId, nextEnabled);
-  }
-  setTileMediaBadges("local", localStream.getAudioTracks()[0]?.enabled ?? false, nextEnabled);
-  setTileVideoToggleButton("local", nextEnabled);
-  setTilePlaceholder("local", !nextEnabled, "Camera is off");
-  applyLocalControlButtons();
-  socket.emit("camera-video-state", { enabled: nextEnabled });
-  setStatus(`Camera ${nextEnabled ? "enabled" : "disabled"}${requestedBy ? ` by ${requestedBy}` : ""}.`);
-});
+        videoTrack.enabled = nextEnabled;
+        if (localParticipantId) {
+          cameraVideoStates.set(localParticipantId, nextEnabled);
+        }
+        setTileMediaBadges("local", localStream.getAudioTracks()[0]?.enabled ?? false, nextEnabled);
+        setTileVideoToggleButton("local", nextEnabled);
+        setTilePlaceholder("local", !nextEnabled, "Camera is off");
+        applyLocalControlButtons();
+        cameraController.emit("camera-video-state", { enabled: nextEnabled });
+        setStatus(`Camera ${nextEnabled ? "enabled" : "disabled"}${requestedBy ? ` by ${requestedBy}` : ""}.`);
+      },
+      onSessionAuthorized: ({ roomId, roomNumber, participantId, accessKey, roomCode }) => {
+        if (!role) {
+          console.warn("[Signal] Ignoring session-authorized with no active role", { roomId, participantId });
+          return;
+        }
 
-socket.on("session-authorized", ({ roomId, roomNumber, participantId, accessKey, roomCode }) => {
-  if (!role) {
-    console.warn("[Signal] Ignoring session-authorized with no active role", { roomId, participantId });
-    return;
-  }
+        applyAuthorizedRoom({ roomId, roomNumber, accessKey, roomCode }, "session-authorized");
+        localParticipantId = participantId || "";
+      },
+      onExistingCameras: (cameras) => {
+        if (role !== "viewer") return;
+        console.log("[WebRTC] existing-cameras", { count: cameras.length, cameras });
 
-  applyAuthorizedRoom({ roomId, roomNumber, accessKey, roomCode }, "session-authorized");
-  localParticipantId = participantId || "";
-});
+        cameras.forEach(({ id, name, videoEnabled }) => {
+          cameraNames.set(id, name || "Camera feed");
+          cameraVideoStates.set(id, videoEnabled !== false);
+          addTimelineEvent(`${cameraNames.get(id)} available.`);
+          if (!peers.has(id)) makePeer(id, true);
+        });
+      },
+      onCameraJoined: ({ id, name, videoEnabled }) => {
+        if (role !== "viewer") return;
+        console.log("[WebRTC] camera-joined", { id, name });
+        cameraNames.set(id, name || "Camera feed");
+        cameraVideoStates.set(id, videoEnabled !== false);
+        addTimelineEvent(`${cameraNames.get(id)} joined.`);
 
-socket.on("existing-cameras", (cameras) => {
-  if (role !== "viewer") return;
-  console.log("[WebRTC] existing-cameras", { count: cameras.length, cameras });
+        if (!peers.has(id)) makePeer(id, true);
+      },
+      onSignal: async ({ from, data }) => {
+        console.log("[WebRTC] signal received", { from, type: data?.type });
+        let pc = peers.get(from);
+        if (!pc) pc = makePeer(from, false);
 
-  cameras.forEach(({ id, name, videoEnabled }) => {
-    cameraNames.set(id, name || "Camera feed");
-    cameraVideoStates.set(id, videoEnabled !== false);
-    addTimelineEvent(`${cameraNames.get(id)} available.`);
-    if (!peers.has(id)) makePeer(id, true);
-  });
-});
+        try {
+          if (data.type === "offer") {
+            console.log("[WebRTC] Processing offer", { from });
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
 
-socket.on("camera-joined", ({ id, name, videoEnabled }) => {
-  if (role !== "viewer") return;
-  console.log("[WebRTC] camera-joined", { id, name });
-  cameraNames.set(id, name || "Camera feed");
-  cameraVideoStates.set(id, videoEnabled !== false);
-  addTimelineEvent(`${cameraNames.get(id)} joined.`);
+            console.log("[WebRTC] Sending answer", { from });
+            cameraController.emit("signal", {
+              target: from,
+              data: { type: "answer", sdp: pc.localDescription }
+            });
+          } else if (data.type === "answer") {
+            console.log("[WebRTC] Processing answer", { from });
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          } else if (data.type === "candidate") {
+            console.log("[WebRTC] Processing candidate", { from });
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          }
+        } catch (err) {
+          console.error("Signal error:", err);
+        }
+      },
+      onCameraLeft: ({ id }) => {
+        const pc = peers.get(id);
+        if (pc) {
+          pc.close();
+          peers.delete(id);
+        }
 
-  if (!peers.has(id)) makePeer(id, true);
-});
+        cameraNames.delete(id);
+        cameraVideoStates.delete(id);
+        const watcher = motionWatchers.get(id);
+        if (watcher) {
+          clearInterval(watcher.intervalId);
+          motionWatchers.delete(id);
+        }
 
-socket.on("signal", async ({ from, data }) => {
-  console.log("[WebRTC] signal received", { from, type: data?.type });
-  let pc = peers.get(from);
-  if (!pc) pc = makePeer(from, false);
+        lastMotionLogAt.delete(id);
+        const card = document.getElementById(`card-${id}`);
+        if (card) card.remove();
+        if (activeCameraTileId === id) {
+          activeCameraTileId = "";
+        }
+        applyActiveCameraLayout();
+        addTimelineEvent("A camera disconnected.");
+        updateEmptyState();
+      },
+      onCameraVideoState: ({ id, enabled }) => {
+        const cameraEnabled = enabled !== false;
+        cameraVideoStates.set(id, cameraEnabled);
 
-  try {
-    if (data.type === "offer") {
-      console.log("[WebRTC] Processing offer", { from });
-      await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+        const cardId = id === localParticipantId && role === "camera" ? "local" : id;
+        if (!document.getElementById(`card-${cardId}`)) return;
 
-      console.log("[WebRTC] Sending answer", { from });
-      socket.emit("signal", {
-        target: from,
-        data: { type: "answer", sdp: pc.localDescription }
-      });
-    } else if (data.type === "answer") {
-      console.log("[WebRTC] Processing answer", { from });
-      await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    } else if (data.type === "candidate") {
-      console.log("[WebRTC] Processing candidate", { from });
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        const micOn = tileMediaStates.get(cardId)?.micOn ?? (cardId === "local" ? localStream?.getAudioTracks?.()[0]?.enabled ?? false : false);
+
+        setTileMediaBadges(cardId, micOn, cameraEnabled);
+        setTileVideoToggleButton(cardId, cameraEnabled);
+        setTilePlaceholder(cardId, !cameraEnabled, "Camera is off");
+        if (!cameraEnabled) {
+          setTileLoading(cardId, false);
+        }
+        addTimelineEvent(`${cameraNames.get(id) || "Camera feed"} camera ${cameraEnabled ? "enabled" : "disabled"}.`);
+      }
     }
-  } catch (err) {
-    console.error("Signal error:", err);
-  }
-});
+  });
 
-socket.on("camera-left", ({ id }) => {
-  const pc = peers.get(id);
-  if (pc) {
-    pc.close();
-    peers.delete(id);
-  }
-
-  cameraNames.delete(id);
-  cameraVideoStates.delete(id);
-  const watcher = motionWatchers.get(id);
-  if (watcher) {
-    clearInterval(watcher.intervalId);
-    motionWatchers.delete(id);
-  }
-
-  lastMotionLogAt.delete(id);
-  const card = document.getElementById(`card-${id}`);
-  if (card) card.remove();
-  if (activeCameraTileId === id) {
-    activeCameraTileId = "";
-  }
-  applyActiveCameraLayout();
-  addTimelineEvent("A camera disconnected.");
-  updateEmptyState();
-});
-
-socket.on("camera-video-state", ({ id, enabled }) => {
-  const cameraEnabled = enabled !== false;
-  cameraVideoStates.set(id, cameraEnabled);
-
-  const cardId = id === localParticipantId && role === "camera" ? "local" : id;
-  if (!document.getElementById(`card-${cardId}`)) return;
-
-  const micOn = tileMediaStates.get(cardId)?.micOn ?? (cardId === "local" ? localStream?.getAudioTracks?.()[0]?.enabled ?? false : false);
-
-  setTileMediaBadges(cardId, micOn, cameraEnabled);
-  setTileVideoToggleButton(cardId, cameraEnabled);
-  setTilePlaceholder(cardId, !cameraEnabled, "Camera is off");
-  if (!cameraEnabled) {
-    setTileLoading(cardId, false);
-  }
-  addTimelineEvent(`${cameraNames.get(id) || "Camera feed"} camera ${cameraEnabled ? "enabled" : "disabled"}.`);
-});
+  syncCameraSocketLifecycle();
+}
 
 async function restoreSessionAfterReconnect() {
   if (!role || !currentRoomCode) return;
@@ -1560,6 +1596,11 @@ rejoinLastBtn.addEventListener("click", async () => {
   }
 });
 
+window.addEventListener("popstate", () => {
+  syncCameraSocketLifecycle();
+});
+
+setupCameraController();
 showScreen(homeScreen);
 applyLayout();
 applyMotionFollowButton();

@@ -25,6 +25,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
 });
 
+// serve the SPA viewer route (same app shell, viewer-only camera socket logic runs client-side)
+app.get('/viewer', (req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
+
 const rooms = new Map();
 const roomByAccessKey = new Map();
 const roomByNumber = new Map();
@@ -106,6 +111,20 @@ function roomCameraList(room) {
     .filter(Boolean);
 }
 
+
+function viewerSocketIds(room) {
+  return [...room.members].filter((socketId) => {
+    const participant = participantBySocketId.get(socketId);
+    return participant?.role === 'viewer' && participant?.pageContext === 'viewer-feeds';
+  });
+}
+
+function emitToViewerPage(room, eventName, payload) {
+  viewerSocketIds(room).forEach((socketId) => {
+    io.to(socketId).emit(eventName, payload);
+  });
+}
+
 function cleanupRoomIfEmpty(room) {
   if (room.members.size > 0) return;
   rooms.delete(room.id);
@@ -151,7 +170,7 @@ io.on('connection', (socket) => {
 
     if (participant.role === 'camera') {
       console.log('[Signal] camera-left broadcast', { roomId: room.id, participantId: participant.participantId });
-      socket.to(room.id).emit('camera-left', { id: participant.participantId });
+      emitToViewerPage(room, 'camera-left', { id: participant.participantId });
     }
 
     socket.leave(room.id);
@@ -236,7 +255,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('join-room', ({ role, name, label, videoEnabled, roomId: requestedRoomId, accessKey, roomCode }, callback) => {
+  socket.on('join-room', ({ role, name, label, videoEnabled, roomId: requestedRoomId, accessKey, roomCode, pageContext }, callback) => {
     const { roomNumber: parsedRoomNumber, accessKey: parsedAccessKey } = parseRoomCode(roomCode);
     const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
     const normalizedRequestedRoomNumber = normalizeRoomNumber(normalizedRequestedRoomId);
@@ -354,6 +373,11 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (role === 'viewer' && pageContext !== 'viewer-feeds') {
+      rejectJoin('Viewer role is only allowed from the view camera feeds page.');
+      return;
+    }
+
     removeSocketFromRoom();
     socket.data.authorizedRoomId = room.id;
 
@@ -364,7 +388,8 @@ io.on('connection', (socket) => {
       role,
       roomId: room.id,
       label: sanitizeLabel(label || name, role === 'camera' ? 'Camera feed' : 'Viewer'),
-      videoEnabled: role === 'camera' ? videoEnabled !== false : undefined
+      videoEnabled: role === 'camera' ? videoEnabled !== false : undefined,
+      pageContext: pageContext === 'viewer-feeds' ? 'viewer-feeds' : 'default'
     };
 
     participantBySocketId.set(socket.id, member);
@@ -401,7 +426,7 @@ io.on('connection', (socket) => {
     }
 
     if (role === 'camera') {
-      socket.to(room.id).emit('camera-joined', {
+      emitToViewerPage(room, 'camera-joined', {
         id: participantId,
         name: member.label,
         videoEnabled: member.videoEnabled !== false
@@ -455,7 +480,7 @@ io.on('connection', (socket) => {
 
     participant.videoEnabled = enabled !== false;
 
-    io.to(room.id).emit('camera-video-state', {
+    emitToViewerPage(room, 'camera-video-state', {
       id: participant.participantId,
       enabled: participant.videoEnabled
     });
@@ -463,8 +488,8 @@ io.on('connection', (socket) => {
 
   socket.on('viewer-camera-video-toggle', ({ targetCameraId, enabled }, callback) => {
     const participant = participantBySocketId.get(socket.id);
-    if (!participant || participant.role !== 'viewer') {
-      if (typeof callback === 'function') callback({ ok: false, error: 'Only viewers can control cameras.' });
+    if (!participant || participant.role !== 'viewer' || participant.pageContext !== 'viewer-feeds') {
+      if (typeof callback === 'function') callback({ ok: false, error: 'Only viewers on the view camera feeds page can control cameras.' });
       return;
     }
 
