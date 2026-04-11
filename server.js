@@ -187,15 +187,24 @@ io.on('connection', (socket) => {
 
       const existingRoomId = roomByNumber.get(roomNumber);
       if (existingRoomId) {
-        if (typeof callback === 'function') {
-          callback({ ok: false, error: 'Room exists. Enter full room code: ROOM:KEY' });
+        room = rooms.get(existingRoomId) || null;
+        if (!room) {
+          roomByNumber.delete(roomNumber);
         }
-        return;
       }
 
-      room = createRoom(roomNumber);
-      created = true;
+      if (!room) {
+        room = createRoom(roomNumber);
+        created = true;
+      }
     }
+
+    console.log('[Signal] authorize-room resolved', {
+      socketId: socket.id,
+      roomNumber: room.roomNumber,
+      roomId: room.id,
+      created
+    });
 
     socket.data.authorizedRoomId = room.id;
 
@@ -239,6 +248,7 @@ io.on('connection', (socket) => {
 
     let room = null;
     let resolvedBy = 'none';
+    let conflictReason = null;
 
     if (authorizedRoomId) {
       room = rooms.get(authorizedRoomId) || null;
@@ -272,21 +282,55 @@ io.on('connection', (socket) => {
     }
 
     if (room && normalizedRequestedRoomId) {
-      const requestedMatchesRoom = room.id === normalizedRequestedRoomId || room.roomNumber === normalizedRequestedRoomNumber;
-      if (!requestedMatchesRoom) room = null;
+      const requestedLooksLikeRoomNumber = Boolean(normalizedRequestedRoomNumber);
+      const requestedMatchesRoom = requestedLooksLikeRoomNumber
+        ? room.roomNumber === normalizedRequestedRoomNumber
+        : room.id === normalizedRequestedRoomId;
+      if (!requestedMatchesRoom) {
+        if (resolvedBy === 'authorizedRoomId') {
+          console.log('[Signal] join-room ignored requestedRoomId mismatch due to prior authorization', {
+            socketId: socket.id,
+            authorizedRoomId,
+            requestedRoomId: normalizedRequestedRoomId,
+            resolvedRoomId: room.id,
+            resolvedRoomNumber: room.roomNumber
+          });
+        } else {
+          conflictReason = 'requested room does not match resolved room';
+          room = null;
+        }
+      }
     }
 
     if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
+      conflictReason = 'access key does not match resolved room';
       room = null;
     }
 
     if (room && parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
+      conflictReason = 'room code number does not match resolved room';
       room = null;
     }
 
     if (!room) {
+      console.log('[Signal] join-room resolve failed', {
+        socketId: socket.id,
+        authorizedRoomId,
+        requestedRoomId: normalizedRequestedRoomId || undefined,
+        requestedRoomNumber: parsedRoomNumber || normalizedRequestedRoomNumber || undefined,
+        hasAccessKey: Boolean(providedAccessKey),
+        conflictReason: conflictReason || 'room not found'
+      });
       rejectJoin('Room not found.');
       return;
+    }
+
+    if (roomByNumber.get(room.roomNumber) !== room.id) {
+      roomByNumber.set(room.roomNumber, room.id);
+      console.log('[Signal] join-room repaired roomByNumber mapping', {
+        roomNumber: room.roomNumber,
+        roomId: room.id
+      });
     }
 
     if (role !== 'camera' && role !== 'viewer') {
@@ -319,9 +363,9 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       participantId,
       role,
+      resolvedBy,
       roomId: room.id,
       roomNumber: room.roomNumber,
-      resolvedBy,
       members: room.members.size,
       cameras: room.cameras.size,
       viewers: room.viewers.size
