@@ -216,6 +216,26 @@ io.on('connection', (socket) => {
     const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
     const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
     const providedAccessKey = normalizedAccessKey || parsedAccessKey;
+    const authorizedRoomId = socket.data.authorizedRoomId;
+
+    function rejectJoin(message) {
+      if (typeof callback === 'function') {
+        callback({ ok: false, error: message });
+      }
+    }
+
+    let room = null;
+
+    // 1) If roomId was provided, it must resolve to a room.
+    if (normalizedRequestedRoomId) {
+      room = rooms.get(normalizedRequestedRoomId) || null;
+      if (!room) {
+        rejectJoin('Unauthorized room access.');
+        return;
+      }
+    }
+
+    // 2) If no roomId, resolve by key when present.
 
     const authorizedRoomId = socket.data.authorizedRoomId;
     let room = null;
