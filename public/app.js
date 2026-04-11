@@ -52,7 +52,17 @@ const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
 function normalizeRoomCode(value) {
-  return value.trim();
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (!trimmed.includes(":")) {
+    return trimmed.toUpperCase();
+  }
+
+  const [roomNumber, accessKey] = trimmed.split(":");
+  const normalizedRoom = (roomNumber || "").trim().toUpperCase();
+  const normalizedAccessKey = (accessKey || "").trim();
+  return `${normalizedRoom}:${normalizedAccessKey}`;
 }
 
 function validateRoomCodeInput(value) {
@@ -829,7 +839,7 @@ function disconnectAndReturnToRoleScreen() {
 }
 
 async function connectRoom() {
-  const enteredRoomCode = roomId().toUpperCase();
+  const enteredRoomCode = roomId();
 
   if (!validateRoomCodeInput(enteredRoomCode)) {
     alert("Enter room number (e.g. FRONTDOOR) or full room code (e.g. FRONTDOOR:k_xxx).");
@@ -1253,7 +1263,7 @@ rejoinLastBtn.addEventListener("click", async () => {
     return;
   }
 
-  currentRoomCode = normalizeRoomCode(previous.roomCode).toUpperCase();
+  currentRoomCode = normalizeRoomCode(previous.roomCode);
   currentRoomId = "";
   roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
