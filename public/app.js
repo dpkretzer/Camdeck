@@ -617,7 +617,7 @@ async function startSelectedCameraStream() {
   selectedCameraDeviceId = cameraDeviceId();
   console.log("[MediaDevices] selected deviceId", selectedCameraDeviceId || "default");
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(localMediaConstraints());
+    const stream = await navigator.mediaDevices.getUserMedia(localMediaConstraints({ includeAudio: false }));
     console.log("[MediaDevices] stream started", {
       deviceId: selectedCameraDeviceId || "default",
       audioTracks: stream.getAudioTracks().length,
@@ -632,7 +632,13 @@ async function startSelectedCameraStream() {
       selectedCameraDeviceId
     });
     const recoverableDeviceError = selectedCameraDeviceId && (error?.name === "OverconstrainedError" || error?.name === "NotFoundError");
-    if (!recoverableDeviceError) throw error;
+    if (!recoverableDeviceError) {
+      console.warn("[MediaDevices] retrying with simple video-only constraints", {
+        name: error?.name,
+        message: error?.message
+      });
+      return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
 
     console.warn("[MediaDevices] selected device failed, retrying default camera", {
       selectedCameraDeviceId,
@@ -642,19 +648,7 @@ async function startSelectedCameraStream() {
 
     selectedCameraDeviceId = "";
     cameraSelectInput.value = "";
-    return navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 1280, max: 1920 },
-        height: { ideal: 720, max: 1080 },
-        frameRate: { ideal: 24, max: 30 },
-        facingMode: "user"
-      },
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      }
-    });
+    return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   }
 }
 
@@ -833,21 +827,25 @@ async function connectRoom() {
   }
 }
 
-function localMediaConstraints() {
+function localMediaConstraints({ includeAudio = false } = {}) {
   const selectedDeviceId = cameraDeviceId();
+  const videoConstraints = {
+    ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {}),
+    width: { ideal: 1280, max: 1920 },
+    height: { ideal: 720, max: 1080 },
+    frameRate: { ideal: 24, max: 30 },
+    ...(!selectedDeviceId ? { facingMode: "user" } : {})
+  };
+
   return {
-    video: {
-      ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {}),
-      width: { ideal: 1280, max: 1920 },
-      height: { ideal: 720, max: 1080 },
-      frameRate: { ideal: 24, max: 30 },
-      facingMode: "user"
-    },
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
+    video: videoConstraints,
+    audio: includeAudio
+      ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      : false
   };
 }
 
@@ -883,7 +881,7 @@ async function startCamera() {
     addTimelineEvent("Camera session started.");
     applyLocalControlButtons();
   } catch (err) {
-    console.error(err);
+    console.error("[WebRTC] Camera startup failed", { name: err?.name, message: err?.message, constraint: err?.constraint, err });
     const message = getReadableMediaError(err);
     setStatus(message);
     alert(message);
