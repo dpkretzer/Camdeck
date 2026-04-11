@@ -226,30 +226,22 @@ io.on('connection', (socket) => {
 
     let room = null;
 
-    // 1) Prefer prior authorization from authorize-room (per-socket protection).
-    if (priorAuthorizedRoomId) {
-      room = rooms.get(priorAuthorizedRoomId) || null;
+    // 1) Prefer prior authorization for this socket.
+    if (authorizedRoomId) {
+      room = rooms.get(authorizedRoomId) || null;
     }
 
-    // 2) If not previously authorized, resolve by access key (explicit or from roomCode).
-    // 1) If roomId was provided, it must resolve to a room.
-    if (normalizedRequestedRoomId) {
+    // 2) If a roomId was provided, it must match a real room.
+    if (!room && normalizedRequestedRoomId) {
       room = rooms.get(normalizedRequestedRoomId) || null;
-      if (!room) {
-        rejectJoin('Unauthorized room access.');
-        return;
-      }
     }
 
-    // 2) If no roomId, resolve by key when present.
+    // 3) If still no room, try access key.
     if (!room && providedAccessKey) {
       room = getRoomByAccessKey(providedAccessKey) || null;
     }
 
-    if (!room && authorizedRoomId) {
-      room = rooms.get(authorizedRoomId) || null;
-    }
-
+    // 4) Enforce consistency checks.
     if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
       room = null;
     }
@@ -274,18 +266,6 @@ io.on('connection', (socket) => {
     });
 
     if (!room) {
-      rejectJoin('Unauthorized room access.');
-      return;
-    }
-
-    // If accessKey is provided, enforce it against resolved room.
-    if (providedAccessKey && room.accessKey !== providedAccessKey) {
-      rejectJoin('Unauthorized room access.');
-      return;
-    }
-
-    // If roomCode includes room number, enforce room number match.
-    if (parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
       rejectJoin('Unauthorized room access.');
       return;
     }
