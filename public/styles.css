@@ -79,7 +79,7 @@ h1 {
   display: block;
   opacity: 1;
   transform: translateY(0) scale(1);
-  animation: screenFadeIn 260ms ease;
+  animation: screenFadeIn 220ms ease;
 }
 
 .glass-panel {
@@ -168,6 +168,14 @@ button {
     box-shadow 180ms ease,
     background 180ms ease,
     opacity 180ms ease;
+  background: linear-gradient(180deg, rgba(24, 90, 132, 0.42), rgba(15, 56, 84, 0.5));
+  box-shadow: inset 0 0 0 1px rgba(68, 181, 255, 0.12);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
 }
 
 button:hover {
@@ -177,6 +185,28 @@ button:hover {
     inset 0 0 0 1px rgba(124, 92, 255, 0.25),
     0 10px 22px rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
+}
+button:active { transform: translateY(1px); }
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+}
+.btn-loading::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(180, 223, 255, 0.3);
+  border-top-color: rgba(180, 223, 255, 0.95);
+  animation: spin 700ms linear infinite;
 }
 
 button:active { transform: translateY(1px); }
@@ -449,6 +479,57 @@ button.danger { background: linear-gradient(180deg, rgba(102, 49, 64, 0.86), rgb
   .live-grid-section,
   .timeline-panel {
     grid-column: 1 / -1;
+  }
+}
+
+.toast-region {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: grid;
+  gap: 8px;
+  width: min(92vw, 340px);
+}
+
+.toast {
+  border: 1px solid rgba(95, 181, 237, 0.35);
+  background: rgba(6, 16, 29, 0.92);
+  color: #d5edff;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: toastIn 220ms ease;
+}
+
+.toast.success { border-color: rgba(84, 210, 145, 0.45); }
+.toast.error { border-color: rgba(231, 95, 95, 0.5); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes screenFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
