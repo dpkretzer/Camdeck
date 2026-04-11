@@ -213,35 +213,46 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', ({ role, name, label, videoEnabled, roomId: requestedRoomId, accessKey, roomCode }, callback) => {
     const { roomNumber: parsedRoomNumber, accessKey: parsedAccessKey } = parseRoomCode(roomCode);
+    const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
+    const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
+    const providedAccessKey = normalizedAccessKey || parsedAccessKey;
 
     const authorizedRoomId = socket.data.authorizedRoomId;
-    let room = authorizedRoomId ? rooms.get(authorizedRoomId) : null;
+    let room = null;
 
-    if (!room && typeof requestedRoomId === 'string' && requestedRoomId.trim()) {
-      room = rooms.get(requestedRoomId.trim()) || null;
+    // Prefer explicit credentials from payload. Fall back to socket-scoped authorization.
+    if (normalizedRequestedRoomId) {
+      room = rooms.get(normalizedRequestedRoomId) || null;
     }
 
-    if (!room && (typeof accessKey === 'string' || parsedAccessKey)) {
-      const keyToUse = typeof accessKey === 'string' && accessKey.trim() ? accessKey.trim() : parsedAccessKey;
-      room = getRoomByAccessKey(keyToUse) || null;
+    if (!room && providedAccessKey) {
+      room = getRoomByAccessKey(providedAccessKey) || null;
+    }
+
+    if (!room && authorizedRoomId) {
+      room = rooms.get(authorizedRoomId) || null;
+    }
+
+    if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
+      room = null;
+    }
+
+    if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
+      room = null;
     }
 
     if (room && parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
       room = null;
     }
 
-    if (room && typeof requestedRoomId === 'string' && requestedRoomId.trim() && room.id !== requestedRoomId.trim()) {
-      room = null;
-    }
-
     console.log('[Signal] join-room request', {
       socketId: socket.id,
       authorizedRoomId,
-      requestedRoomId,
+      requestedRoomId: normalizedRequestedRoomId || undefined,
       role,
       name,
       label,
-      hasAccessKey: Boolean(accessKey || parsedAccessKey),
+      hasAccessKey: Boolean(providedAccessKey),
       hasRoomCode: Boolean(roomCode)
     });
 
