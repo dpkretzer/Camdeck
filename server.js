@@ -257,9 +257,19 @@ io.on('connection', (socket) => {
     });
 
     if (!room) {
-      if (typeof callback === 'function') {
-        callback({ ok: false, error: 'Unauthorized room access.' });
-      }
+      rejectJoin('Unauthorized room access.');
+      return;
+    }
+
+    // If accessKey is provided, enforce it against resolved room.
+    if (providedAccessKey && room.accessKey !== providedAccessKey) {
+      rejectJoin('Unauthorized room access.');
+      return;
+    }
+
+    // If roomCode includes room number, enforce room number match.
+    if (parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
+      rejectJoin('Unauthorized room access.');
       return;
     }
 
