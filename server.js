@@ -79,6 +79,10 @@ function createRoom(roomNumber) {
   return room;
 }
 
+function viewerControlRoomName(roomId) {
+  return `viewer-controls:${roomId}`;
+}
+
 function getRoomByAccessKey(accessKey) {
   if (typeof accessKey !== 'string') return null;
   const trimmed = accessKey.trim();
@@ -148,10 +152,11 @@ io.on('connection', (socket) => {
     room.members.delete(socket.id);
     room.cameras.delete(participant.participantId);
     room.viewers.delete(participant.participantId);
+    socket.leave(viewerControlRoomName(room.id));
 
     if (participant.role === 'camera') {
       console.log('[Signal] camera-left broadcast', { roomId: room.id, participantId: participant.participantId });
-      socket.to(room.id).emit('camera-left', { id: participant.participantId });
+      io.to(viewerControlRoomName(room.id)).emit('camera-left', { id: participant.participantId });
     }
 
     socket.leave(room.id);
@@ -370,7 +375,11 @@ io.on('connection', (socket) => {
     participantBySocketId.set(socket.id, member);
     room.members.add(socket.id);
     if (role === 'camera') room.cameras.add(participantId);
-    if (role === 'viewer') room.viewers.add(participantId);
+    if (role === 'viewer') {
+      room.viewers.add(participantId);
+      // Viewer-only channel for camera-related feed events/commands.
+      socket.join(viewerControlRoomName(room.id));
+    }
 
     // Always join by persistent room.id so users resolving by roomId/roomNumber end up in the same room.
     socket.join(room.id);
@@ -401,7 +410,7 @@ io.on('connection', (socket) => {
     }
 
     if (role === 'camera') {
-      socket.to(room.id).emit('camera-joined', {
+      io.to(viewerControlRoomName(room.id)).emit('camera-joined', {
         id: participantId,
         name: member.label,
         videoEnabled: member.videoEnabled !== false
@@ -455,7 +464,7 @@ io.on('connection', (socket) => {
 
     participant.videoEnabled = enabled !== false;
 
-    io.to(room.id).emit('camera-video-state', {
+    io.to(viewerControlRoomName(room.id)).emit('camera-video-state', {
       id: participant.participantId,
       enabled: participant.videoEnabled
     });
