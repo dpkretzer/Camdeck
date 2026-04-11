@@ -29,8 +29,10 @@ const startViewerBtn = document.getElementById("startViewer");
 const remoteVideos = document.getElementById("remoteVideos");
 
 let currentRoomId = "";
+let currentAccessKey = "";
 let role = null;
 let localStream = null;
+let localParticipantId = "";
 let layoutMode = "grid";
 let motionFollowEnabled = false;
 let localPeerTile = null;
@@ -48,11 +50,11 @@ const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
 function normalizeRoomId(value) {
-  return value.trim().toUpperCase();
+  return value.trim();
 }
 
-function validateRoomId(nextRoomId) {
-  return /^[A-Z0-9_-]{3,24}$/.test(nextRoomId);
+function validateAccessKey(nextAccessKey) {
+  return !nextAccessKey || /^k_[A-Za-z0-9_-]{8,}$/.test(nextAccessKey);
 }
 
 function showScreen(screen) {
@@ -94,10 +96,15 @@ function cameraDeviceId() {
 }
 
 function saveSession(nextRole = role) {
-  if (!currentRoomId) return;
+  if (!currentRoomId || !currentAccessKey) return;
   localStorage.setItem(
     "camdeck-session",
-    JSON.stringify({ roomId: currentRoomId, role: nextRole || null, cameraName: cameraName() })
+    JSON.stringify({
+      roomId: currentRoomId,
+      accessKey: currentAccessKey,
+      role: nextRole || null,
+      cameraName: cameraName()
+    })
   );
 }
 
@@ -203,7 +210,6 @@ function joinRoomWithRole(roleName) {
     socket.emit(
       "join-room",
       {
-        roomId: currentRoomId,
         role: roleName,
         name: roleName === "camera" ? cameraName() : "",
         videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined
@@ -546,6 +552,19 @@ async function refreshCameraDevices() {
   }
 }
 
+
+function authorizeRoom(accessKey = "") {
+  return new Promise((resolve, reject) => {
+    socket.emit("authorize-room", { accessKey }, (response) => {
+      if (!response || !response.ok) {
+        reject(new Error(response?.error || "Access denied"));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
 async function replacePeerTracks(stream) {
   const [nextVideoTrack] = stream.getVideoTracks();
   const [nextAudioTrack] = stream.getAudioTracks();
@@ -718,6 +737,7 @@ function leaveRoom() {
   socket.emit("leave-room");
   clearPeersAndVideos();
   stopLocalStream();
+  localParticipantId = "";
   role = null;
 }
 
@@ -727,25 +747,30 @@ function disconnectAndReturnToRoleScreen() {
   setStatus("Disconnected from the room.");
 }
 
-function connectRoom() {
-  const enteredRoom = roomId();
+async function connectRoom() {
+  const enteredAccessKey = roomId();
 
-  if (!enteredRoom) {
-    alert("Enter your room key.");
+  if (!validateAccessKey(enteredAccessKey)) {
+    alert("Access key format is invalid.");
     return;
   }
 
-  if (!validateRoomId(enteredRoom)) {
-    alert("Room key must be 3-24 characters (letters, numbers, - or _)."
+  try {
+    await ensureSocketConnected();
+    const authorization = await authorizeRoom(enteredAccessKey);
+    currentRoomId = authorization.roomId;
+    currentAccessKey = authorization.accessKey;
+    roomIdInput.value = "";
+    saveSession();
+    showScreen(roleScreen);
+    setStatus(
+      authorization.created
+        ? `Secure room created. Share this access key: ${currentAccessKey}`
+        : "Access granted. Choose camera or viewer."
     );
-    return;
+  } catch (error) {
+    setStatus(error?.message || "Room authorization failed.");
   }
-
-  currentRoomId = enteredRoom;
-  roomIdInput.value = "";
-  setStatus("Access granted. Choose camera or viewer.");
-  saveSession();
-  showScreen(roleScreen);
 }
 
 function localMediaConstraints() {
@@ -925,7 +950,9 @@ function toggleCamera() {
   }
 
   videoTrack.enabled = !videoTrack.enabled;
-  cameraVideoStates.set(socket.id, videoTrack.enabled);
+  if (localParticipantId) {
+    cameraVideoStates.set(localParticipantId, videoTrack.enabled);
+  }
   setTileMediaBadges("local", localStream.getAudioTracks()[0]?.enabled ?? false, videoTrack.enabled);
   setTileVideoToggleButton("local", videoTrack.enabled);
   setTilePlaceholder("local", !videoTrack.enabled, "Camera is off");
@@ -933,6 +960,12 @@ function toggleCamera() {
   socket.emit("camera-video-state", { enabled: videoTrack.enabled });
   setStatus(videoTrack.enabled ? "Camera enabled." : "Camera disabled.");
 }
+
+socket.on("session-authorized", ({ roomId, participantId, accessKey }) => {
+  currentRoomId = roomId || currentRoomId;
+  currentAccessKey = accessKey || currentAccessKey;
+  localParticipantId = participantId || "";
+});
 
 socket.on("existing-cameras", (cameras) => {
   if (role !== "viewer") return;
@@ -1011,7 +1044,7 @@ socket.on("camera-video-state", ({ id, enabled }) => {
   const cameraEnabled = enabled !== false;
   cameraVideoStates.set(id, cameraEnabled);
 
-  const cardId = id === socket.id && role === "camera" ? "local" : id;
+  const cardId = id === localParticipantId && role === "camera" ? "local" : id;
   if (!document.getElementById(`card-${cardId}`)) return;
 
   const micOn = tileMediaStates.get(cardId)?.micOn ?? (cardId === "local" ? localStream?.getAudioTracks?.()[0]?.enabled ?? false : false);
@@ -1026,11 +1059,14 @@ socket.on("camera-video-state", ({ id, enabled }) => {
 });
 
 async function restoreSessionAfterReconnect() {
-  if (!role || !currentRoomId) return;
+  if (!role || !currentAccessKey) return;
 
   clearPeersAndVideos();
 
   try {
+    const authorization = await authorizeRoom(currentAccessKey);
+    currentRoomId = authorization.roomId;
+    currentAccessKey = authorization.accessKey;
     await joinRoomWithRole(role);
     if (role === "camera" && localStream) {
       mountLocalTile(localStream, cameraName() || "You (camera)");
@@ -1074,6 +1110,7 @@ roomIdInput.addEventListener("keydown", (event) => {
 changeRoomBtn.addEventListener("click", () => {
   leaveRoom();
   currentRoomId = "";
+  currentAccessKey = "";
   roomIdInput.value = "";
   cameraNameInput.value = "";
   localStorage.removeItem("camdeck-session");
@@ -1118,21 +1155,31 @@ stopRecordingBtn.addEventListener("click", stopRecording);
 
 rejoinLastBtn.addEventListener("click", async () => {
   const previous = loadSession();
-  if (!previous?.roomId) {
+  if (!previous?.accessKey) {
     setStatus("No previous session found.");
     return;
   }
 
-  currentRoomId = normalizeRoomId(previous.roomId);
+  currentAccessKey = normalizeRoomId(previous.accessKey);
+  currentRoomId = "";
   roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
-  showScreen(roleScreen);
-  setStatus("Last session loaded.");
 
-  if (previous.role === "camera") {
-    await startCamera();
-  } else if (previous.role === "viewer") {
-    await startViewer();
+  try {
+    await ensureSocketConnected();
+    const authorization = await authorizeRoom(currentAccessKey);
+    currentRoomId = authorization.roomId;
+    currentAccessKey = authorization.accessKey;
+    showScreen(roleScreen);
+    setStatus("Last session loaded.");
+
+    if (previous.role === "camera") {
+      await startCamera();
+    } else if (previous.role === "viewer") {
+      await startViewer();
+    }
+  } catch (error) {
+    setStatus(error?.message || "Could not restore previous session.");
   }
 });
 
