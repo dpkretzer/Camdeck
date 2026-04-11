@@ -201,8 +201,10 @@ io.on('connection', (socket) => {
         return;
       }
 
-      room = createRoom(roomNumber);
-      created = true;
+      if (!room) {
+        room = createRoom(roomNumber);
+        created = true;
+      }
     }
 
     console.log('[Signal] authorize-room resolved', {
