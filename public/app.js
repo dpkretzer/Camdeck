@@ -44,6 +44,7 @@ let recordingStream = null;
 let recordingSourceLabel = "";
 let availableCameraDevices = [];
 let selectedCameraDeviceId = "";
+let activeJoinAttempt = 0;
 const peers = new Map();
 const cameraNames = new Map();
 const cameraVideoStates = new Map();
@@ -113,6 +114,28 @@ function cameraName() {
 
 function cameraDeviceId() {
   return cameraSelectInput.value || selectedCameraDeviceId || "";
+}
+
+function resetRoomContext() {
+  currentRoomId = "";
+  currentRoomNumber = "";
+  currentAccessKey = "";
+  currentRoomCode = "";
+  localParticipantId = "";
+}
+
+function applyAuthorizedRoom(authorization, source = "unknown") {
+  currentRoomId = authorization?.roomId || "";
+  currentRoomNumber = authorization?.roomNumber || "";
+  currentAccessKey = authorization?.accessKey || "";
+  currentRoomCode = authorization?.roomCode || "";
+  console.log("[Signal] applyAuthorizedRoom", {
+    source,
+    roomId: currentRoomId || undefined,
+    roomNumber: currentRoomNumber || undefined,
+    hasAccessKey: Boolean(currentAccessKey),
+    hasRoomCode: Boolean(currentRoomCode)
+  });
 }
 
 function saveSession(nextRole = role) {
@@ -234,6 +257,7 @@ function ensureSocketConnected() {
 }
 
 function joinRoomWithRole(roleName) {
+  const joinAttempt = ++activeJoinAttempt;
   const [videoTrack] = localStream?.getVideoTracks?.() || [];
   const authPayload = {
     roomId: currentRoomId || undefined,
@@ -245,7 +269,8 @@ function joinRoomWithRole(roleName) {
     role: roleName,
     roomId: authPayload.roomId,
     hasAccessKey: Boolean(authPayload.accessKey),
-    hasRoomCode: Boolean(authPayload.roomCode)
+    hasRoomCode: Boolean(authPayload.roomCode),
+    joinAttempt
   });
 
   return new Promise((resolve, reject) => {
@@ -258,6 +283,11 @@ function joinRoomWithRole(roleName) {
         ...authPayload
       },
       (response) => {
+        if (joinAttempt !== activeJoinAttempt) {
+          console.warn("[Signal] Ignoring stale join-room callback", { joinAttempt, activeJoinAttempt });
+          reject(new Error("Stale join response ignored."));
+          return;
+        }
         if (!response || !response.ok) {
           reject(new Error(response?.error || "Failed to join room"));
           return;
@@ -849,10 +879,7 @@ async function connectRoom() {
   try {
     await ensureSocketConnected();
     const authorization = await authorizeRoom(enteredRoomCode);
-    currentRoomId = authorization.roomId;
-    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
-    currentAccessKey = authorization.accessKey;
-    currentRoomCode = authorization.roomCode || currentRoomCode;
+    applyAuthorizedRoom(authorization, "connectRoom");
     roomIdInput.value = "";
     saveSession();
     showScreen(roleScreen);
@@ -921,7 +948,19 @@ async function startCamera() {
     applyLocalControlButtons();
   } catch (err) {
     console.error("[WebRTC] Camera startup failed", { name: err?.name, message: err?.message, constraint: err?.constraint, err });
-    const message = getReadableMediaError(err);
+    const mediaErrorNames = new Set([
+      "NotAllowedError",
+      "SecurityError",
+      "NotFoundError",
+      "DevicesNotFoundError",
+      "NotReadableError",
+      "TrackStartError",
+      "AbortError",
+      "OverconstrainedError",
+      "ConstraintNotSatisfiedError",
+      "TypeError"
+    ]);
+    const message = mediaErrorNames.has(err?.name) ? getReadableMediaError(err) : err?.message || "Failed to start camera.";
     setStatus(message);
     alert(message);
     role = null;
@@ -955,8 +994,8 @@ async function startViewer() {
     applyLocalControlButtons();
     updateEmptyState();
   } catch (err) {
-    console.error(err);
-    setStatus("Failed to connect. Please try again.");
+    console.error("[WebRTC] Viewer startup failed", err);
+    setStatus(err?.message || "Failed to connect. Please try again.");
     role = null;
     showScreen(roleScreen);
   }
@@ -1059,10 +1098,12 @@ function toggleCamera() {
 }
 
 socket.on("session-authorized", ({ roomId, roomNumber, participantId, accessKey, roomCode }) => {
-  currentRoomId = roomId || currentRoomId;
-  currentRoomNumber = roomNumber || currentRoomNumber;
-  currentAccessKey = accessKey || currentAccessKey;
-  currentRoomCode = roomCode || currentRoomCode;
+  if (!role) {
+    console.warn("[Signal] Ignoring session-authorized with no active role", { roomId, participantId });
+    return;
+  }
+
+  applyAuthorizedRoom({ roomId, roomNumber, accessKey, roomCode }, "session-authorized");
   localParticipantId = participantId || "";
 });
 
@@ -1164,10 +1205,7 @@ async function restoreSessionAfterReconnect() {
 
   try {
     const authorization = await authorizeRoom(currentRoomCode);
-    currentRoomId = authorization.roomId;
-    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
-    currentAccessKey = authorization.accessKey;
-    currentRoomCode = authorization.roomCode || currentRoomCode;
+    applyAuthorizedRoom(authorization, "restoreSessionAfterReconnect");
     await joinRoomWithRole(role);
     if (role === "camera" && localStream) {
       mountLocalTile(localStream, cameraName() || "You (camera)");
@@ -1185,7 +1223,7 @@ async function restoreSessionAfterReconnect() {
 
 socket.on("connect", () => {
   setConnectionBadge(true);
-  if (role && currentRoomId) {
+  if (role && currentRoomCode) {
     restoreSessionAfterReconnect();
   }
 });
@@ -1210,10 +1248,7 @@ roomIdInput.addEventListener("keydown", (event) => {
 
 changeRoomBtn.addEventListener("click", () => {
   leaveRoom();
-  currentRoomId = "";
-  currentRoomNumber = "";
-  currentAccessKey = "";
-  currentRoomCode = "";
+  resetRoomContext();
   roomIdInput.value = "";
   cameraNameInput.value = "";
   localStorage.removeItem("camdeck-session");
@@ -1265,16 +1300,15 @@ rejoinLastBtn.addEventListener("click", async () => {
 
   currentRoomCode = normalizeRoomCode(previous.roomCode);
   currentRoomId = "";
+  currentRoomNumber = "";
+  currentAccessKey = "";
   roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
 
   try {
     await ensureSocketConnected();
     const authorization = await authorizeRoom(currentRoomCode);
-    currentRoomId = authorization.roomId;
-    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
-    currentAccessKey = authorization.accessKey;
-    currentRoomCode = authorization.roomCode || currentRoomCode;
+    applyAuthorizedRoom(authorization, "rejoinLast");
     showScreen(roleScreen);
     setStatus("Last session loaded.");
 
