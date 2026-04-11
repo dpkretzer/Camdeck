@@ -211,22 +211,62 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('join-room', ({ role, name, label, videoEnabled }, callback) => {
-    const roomId = socket.data.authorizedRoomId;
-    const room = roomId ? rooms.get(roomId) : null;
+  socket.on('join-room', ({ role, name, label, videoEnabled, roomId: requestedRoomId, accessKey, roomCode }, callback) => {
+    const { roomNumber: parsedRoomNumber, accessKey: parsedAccessKey } = parseRoomCode(roomCode);
+    const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
+    const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
+    const providedAccessKey = normalizedAccessKey || parsedAccessKey;
+    const priorAuthorizedRoomId = socket.data.authorizedRoomId;
+
+    function rejectJoin(message) {
+      if (typeof callback === 'function') {
+        callback({ ok: false, error: message });
+      }
+    }
+
+    let room = null;
+
+    // 1) Prefer prior authorization from authorize-room (per-socket protection).
+    if (priorAuthorizedRoomId) {
+      room = rooms.get(priorAuthorizedRoomId) || null;
+    }
+
+    // 2) If not previously authorized, resolve by access key (explicit or from roomCode).
+    if (!room && providedAccessKey) {
+      room = getRoomByAccessKey(providedAccessKey) || null;
+    }
+
+    // roomId is treated as a consistency check, not a standalone credential.
+    if (!room) {
+      rejectJoin('Unauthorized room access.');
+      return;
+    }
 
     console.log('[Signal] join-room request', {
       socketId: socket.id,
-      roomId,
+      authorizedRoomId: priorAuthorizedRoomId,
+      requestedRoomId: normalizedRequestedRoomId || undefined,
       role,
       name,
-      label
+      label,
+      hasAccessKey: Boolean(providedAccessKey),
+      hasRoomCode: Boolean(roomCode)
     });
 
-    if (!room) {
-      if (typeof callback === 'function') {
-        callback({ ok: false, error: 'Unauthorized room access.' });
-      }
+    if (normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
+      rejectJoin('Unauthorized room access.');
+      return;
+    }
+
+    // If accessKey is provided, enforce it against resolved room.
+    if (providedAccessKey && room.accessKey !== providedAccessKey) {
+      rejectJoin('Unauthorized room access.');
+      return;
+    }
+
+    // If roomCode includes room number, enforce room number match.
+    if (parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
+      rejectJoin('Unauthorized room access.');
       return;
     }
 
@@ -239,12 +279,14 @@ io.on('connection', (socket) => {
 
     removeSocketFromRoom();
 
+    socket.data.authorizedRoomId = room.id;
+
     const participantId = buildParticipantId();
     const member = {
       socketId: socket.id,
       participantId,
       role,
-      roomId,
+      roomId: room.id,
       label: sanitizeLabel(label || name, role === 'camera' ? 'Camera feed' : 'Viewer'),
       videoEnabled: role === 'camera' ? videoEnabled !== false : undefined
     };
