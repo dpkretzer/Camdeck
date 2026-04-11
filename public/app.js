@@ -46,6 +46,7 @@ let recordingSourceLabel = "";
 let availableCameraDevices = [];
 let selectedCameraDeviceId = "";
 let activeJoinAttempt = 0;
+let activeCameraTileId = "";
 const peers = new Map();
 const cameraNames = new Map();
 const cameraVideoStates = new Map();
@@ -210,6 +211,40 @@ function applyLayout() {
   remoteVideos.classList.toggle("xl:grid-cols-1", focusMode);
   remoteVideos.classList.toggle("2xl:grid-cols-1", focusMode);
   toggleLayoutBtn.textContent = focusMode ? "Grid layout" : "Focus layout";
+}
+
+function applyActiveCameraLayout() {
+  const cards = Array.from(remoteVideos.querySelectorAll("[data-participant-tile]"));
+  if (!cards.length) {
+    activeCameraTileId = "";
+    return;
+  }
+
+  const hasActive = cards.some((card) => card.id === `card-${activeCameraTileId}`);
+  if (!hasActive) {
+    activeCameraTileId = cards[0].id.replace("card-", "");
+  }
+
+  cards.forEach((card) => {
+    const cardId = card.id.replace("card-", "");
+    const isActive = cardId === activeCameraTileId;
+    card.classList.toggle("active-camera", isActive);
+    card.classList.toggle("thumbnail-camera", !isActive);
+  });
+
+  const activeCard = document.getElementById(`card-${activeCameraTileId}`);
+  if (activeCard && remoteVideos.firstElementChild !== activeCard) {
+    remoteVideos.prepend(activeCard);
+  }
+}
+
+function setActiveCameraTile(id, { scrollIntoView = true } = {}) {
+  if (!id || !document.getElementById(`card-${id}`)) return;
+  activeCameraTileId = id;
+  applyActiveCameraLayout();
+  if (scrollIntoView) {
+    document.getElementById(`card-${id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 }
 
 function applyMotionFollowButton() {
@@ -394,6 +429,8 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   card.className = `relative overflow-hidden rounded-2xl border bg-slate-900/80 p-3 shadow-lg ${
     isLocal ? "border-cyan-300/70 ring-1 ring-cyan-300/50" : "border-white/10"
   }`;
+  card.classList.add("video-card-clickable");
+  card.tabIndex = 0;
 
   const mediaFrame = document.createElement("div");
   mediaFrame.className = "relative aspect-video overflow-hidden rounded-xl bg-black/90";
@@ -461,7 +498,18 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   };
 
   video.addEventListener("canplay", handleCanPlay);
+  card.addEventListener("click", () => setActiveCameraTile(id, { scrollIntoView: false }));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setActiveCameraTile(id, { scrollIntoView: false });
+    }
+  });
   remoteVideos.appendChild(card);
+  if (!activeCameraTileId) {
+    activeCameraTileId = id;
+  }
+  applyActiveCameraLayout();
   return card;
 }
 
@@ -512,6 +560,7 @@ function clearPeersAndVideos() {
   motionWatchers.clear();
   lastMotionLogAt.clear();
   localPeerTile = null;
+  activeCameraTileId = "";
   remoteVideos.innerHTML = "";
   sessionTimeline.innerHTML = "";
   updateEmptyState();
@@ -571,8 +620,7 @@ function detectMotionOnVideo(id, videoEl) {
     if (motionFollowEnabled) {
       layoutMode = "focus";
       applyLayout();
-      remoteVideos.prepend(card);
-      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setActiveCameraTile(id);
     }
   }, 900);
 
@@ -636,6 +684,7 @@ function mountLocalTile(stream, cameraLabel) {
     setTilePlaceholder("local", true, "Preview unavailable");
     setStatus("Camera stream started, but preview autoplay was blocked. Tap the video to start playback.");
   });
+  applyActiveCameraLayout();
 }
 
 function stopLocalStream() {
@@ -1261,6 +1310,10 @@ socket.on("camera-left", ({ id }) => {
   lastMotionLogAt.delete(id);
   const card = document.getElementById(`card-${id}`);
   if (card) card.remove();
+  if (activeCameraTileId === id) {
+    activeCameraTileId = "";
+  }
+  applyActiveCameraLayout();
   addTimelineEvent("A camera disconnected.");
   updateEmptyState();
 });
