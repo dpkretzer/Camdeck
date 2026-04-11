@@ -216,7 +216,7 @@ io.on('connection', (socket) => {
     const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
     const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
     const providedAccessKey = normalizedAccessKey || parsedAccessKey;
-    const priorAuthorizedRoomId = socket.data.authorizedRoomId;
+    const authorizedRoomId = socket.data.authorizedRoomId;
 
     function rejectJoin(message) {
       if (typeof callback === 'function') {
@@ -232,19 +232,39 @@ io.on('connection', (socket) => {
     }
 
     // 2) If not previously authorized, resolve by access key (explicit or from roomCode).
+    // 1) If roomId was provided, it must resolve to a room.
+    if (normalizedRequestedRoomId) {
+      room = rooms.get(normalizedRequestedRoomId) || null;
+      if (!room) {
+        rejectJoin('Unauthorized room access.');
+        return;
+      }
+    }
+
+    // 2) If no roomId, resolve by key when present.
     if (!room && providedAccessKey) {
       room = getRoomByAccessKey(providedAccessKey) || null;
     }
 
-    // roomId is treated as a consistency check, not a standalone credential.
-    if (!room) {
-      rejectJoin('Unauthorized room access.');
-      return;
+    if (!room && authorizedRoomId) {
+      room = rooms.get(authorizedRoomId) || null;
+    }
+
+    if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
+      room = null;
+    }
+
+    if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
+      room = null;
+    }
+
+    if (room && parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
+      room = null;
     }
 
     console.log('[Signal] join-room request', {
       socketId: socket.id,
-      authorizedRoomId: priorAuthorizedRoomId,
+      authorizedRoomId,
       requestedRoomId: normalizedRequestedRoomId || undefined,
       role,
       name,
@@ -253,7 +273,7 @@ io.on('connection', (socket) => {
       hasRoomCode: Boolean(roomCode)
     });
 
-    if (normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
+    if (!room) {
       rejectJoin('Unauthorized room access.');
       return;
     }
