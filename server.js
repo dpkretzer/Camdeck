@@ -211,16 +211,49 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('join-room', ({ role, name, label, videoEnabled }, callback) => {
-    const roomId = socket.data.authorizedRoomId;
-    const room = roomId ? rooms.get(roomId) : null;
+  socket.on('join-room', ({ role, name, label, videoEnabled, roomId: requestedRoomId, accessKey, roomCode }, callback) => {
+    const { roomNumber: parsedRoomNumber, accessKey: parsedAccessKey } = parseRoomCode(roomCode);
+    const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
+    const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
+    const providedAccessKey = normalizedAccessKey || parsedAccessKey;
+
+    const authorizedRoomId = socket.data.authorizedRoomId;
+    let room = null;
+
+    // Prefer explicit credentials from payload. Fall back to socket-scoped authorization.
+    if (normalizedRequestedRoomId) {
+      room = rooms.get(normalizedRequestedRoomId) || null;
+    }
+
+    if (!room && providedAccessKey) {
+      room = getRoomByAccessKey(providedAccessKey) || null;
+    }
+
+    if (!room && authorizedRoomId) {
+      room = rooms.get(authorizedRoomId) || null;
+    }
+
+    if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
+      room = null;
+    }
+
+    if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
+      room = null;
+    }
+
+    if (room && parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
+      room = null;
+    }
 
     console.log('[Signal] join-room request', {
       socketId: socket.id,
-      roomId,
+      authorizedRoomId,
+      requestedRoomId: normalizedRequestedRoomId || undefined,
       role,
       name,
-      label
+      label,
+      hasAccessKey: Boolean(providedAccessKey),
+      hasRoomCode: Boolean(roomCode)
     });
 
     if (!room) {
@@ -239,12 +272,14 @@ io.on('connection', (socket) => {
 
     removeSocketFromRoom();
 
+    socket.data.authorizedRoomId = room.id;
+
     const participantId = buildParticipantId();
     const member = {
       socketId: socket.id,
       participantId,
       role,
-      roomId,
+      roomId: room.id,
       label: sanitizeLabel(label || name, role === 'camera' ? 'Camera feed' : 'Viewer'),
       videoEnabled: role === 'camera' ? videoEnabled !== false : undefined
     };
