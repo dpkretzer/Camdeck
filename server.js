@@ -187,10 +187,18 @@ io.on('connection', (socket) => {
 
       const existingRoomId = roomByNumber.get(roomNumber);
       if (existingRoomId) {
-        room = rooms.get(existingRoomId) || null;
-        if (!room) {
-          roomByNumber.delete(roomNumber);
-        }
+        const room = rooms.get(existingRoomId);
+        socket.data.authorizedRoomId = room.id;
+
+        callback({
+          ok: true,
+          created: false,
+          roomNumber: room.roomNumber,
+          roomId: room.id,
+          accessKey: room.accessKey,
+          roomCode: `${room.roomNumber}:${room.accessKey}`
+        });
+        return;
       }
 
       if (!room) {
