@@ -29,8 +29,12 @@ const startViewerBtn = document.getElementById("startViewer");
 const remoteVideos = document.getElementById("remoteVideos");
 
 let currentRoomId = "";
+let currentRoomNumber = "";
+let currentAccessKey = "";
+let currentRoomCode = "";
 let role = null;
 let localStream = null;
+let localParticipantId = "";
 let layoutMode = "grid";
 let motionFollowEnabled = false;
 let localPeerTile = null;
@@ -47,12 +51,20 @@ const tileMediaStates = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
-function normalizeRoomId(value) {
-  return value.trim().toUpperCase();
+function normalizeRoomCode(value) {
+  return value.trim();
 }
 
-function validateRoomId(nextRoomId) {
-  return /^[A-Z0-9_-]{3,24}$/.test(nextRoomId);
+function validateRoomCodeInput(value) {
+  const normalized = value.trim();
+  if (!normalized) return false;
+
+  if (normalized.includes(":")) {
+    const [roomNumber, accessKey] = normalized.split(":");
+    return /^[A-Z0-9_-]{3,24}$/i.test((roomNumber || "").trim()) && /^k_[A-Za-z0-9_-]{8,}$/.test((accessKey || "").trim());
+  }
+
+  return /^[A-Z0-9_-]{3,24}$/i.test(normalized);
 }
 
 function showScreen(screen) {
@@ -82,7 +94,7 @@ function setConnectionBadge(connected) {
 }
 
 function roomId() {
-  return normalizeRoomId(roomIdInput.value.trim());
+  return normalizeRoomCode(roomIdInput.value.trim());
 }
 
 function cameraName() {
@@ -94,10 +106,17 @@ function cameraDeviceId() {
 }
 
 function saveSession(nextRole = role) {
-  if (!currentRoomId) return;
+  if (!currentRoomId || !currentAccessKey || !currentRoomCode) return;
   localStorage.setItem(
     "camdeck-session",
-    JSON.stringify({ roomId: currentRoomId, role: nextRole || null, cameraName: cameraName() })
+    JSON.stringify({
+      roomId: currentRoomId,
+      roomNumber: currentRoomNumber,
+      accessKey: currentAccessKey,
+      roomCode: currentRoomCode,
+      role: nextRole || null,
+      cameraName: cameraName()
+    })
   );
 }
 
@@ -203,7 +222,6 @@ function joinRoomWithRole(roleName) {
     socket.emit(
       "join-room",
       {
-        roomId: currentRoomId,
         role: roleName,
         name: roleName === "camera" ? cameraName() : "",
         videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined
@@ -220,22 +238,28 @@ function joinRoomWithRole(roleName) {
 }
 
 function getReadableMediaError(error) {
-  if (!error?.name) return "Unable to access camera/microphone.";
+  const errorName = error?.name || "UnknownError";
+  const errorMessage = error?.message ? ` (${error.message})` : "";
+  const failedConstraint = error?.constraint ? ` [constraint: ${error.constraint}]` : "";
+  const detail = `${errorName}${errorMessage}${failedConstraint}`;
 
-  if (error.name === "NotAllowedError") {
-    return "Permission denied. Please allow camera and microphone access in browser settings.";
+  if (errorName === "NotAllowedError" || errorName === "SecurityError") {
+    return `Permission denied. Allow camera/microphone access in browser settings and reload. [${detail}]`;
   }
-  if (error.name === "NotFoundError") {
-    return "Camera or microphone not found. Please connect a device and retry.";
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return `No camera or microphone found. Connect a device and retry. [${detail}]`;
   }
-  if (error.name === "NotReadableError") {
-    return "Camera is busy or unavailable. Close other apps using the camera and retry.";
+  if (errorName === "NotReadableError" || errorName === "TrackStartError" || errorName === "AbortError") {
+    return `Camera is busy or already in use. Close other camera apps and retry. [${detail}]`;
   }
-  if (error.name === "OverconstrainedError") {
-    return "Camera does not support requested quality. Try another camera device.";
+  if (errorName === "OverconstrainedError" || errorName === "ConstraintNotSatisfiedError") {
+    return `Unsupported camera constraints. Try another camera or lower quality settings. [${detail}]`;
+  }
+  if (errorName === "TypeError") {
+    return `Invalid media constraints or insecure context. Use HTTPS/localhost and valid device settings. [${detail}]`;
   }
 
-  return `Media error: ${error.name}`;
+  return `Media setup failed. [${detail}]`;
 }
 
 function createStatusBadge(text, colorClass) {
@@ -463,6 +487,7 @@ function attachRemoteVideo(id, stream) {
   video.play().catch(() => {
     setTileLoading(id, false);
     setTilePlaceholder(id, true, "Tap retry if playback is blocked");
+    setStatus("Remote stream received, but autoplay was blocked. Tap retry playback.");
   });
 
   if (!videoTrack || !videoEnabled) {
@@ -494,6 +519,7 @@ function mountLocalTile(stream, cameraLabel) {
   video.play().catch(() => {
     setTileLoading("local", false);
     setTilePlaceholder("local", true, "Preview unavailable");
+    setStatus("Camera stream started, but preview autoplay was blocked. Tap the video to start playback.");
   });
 }
 
@@ -543,7 +569,21 @@ async function refreshCameraDevices() {
     updateCameraSelectOptions(availableCameraDevices);
   } catch (error) {
     console.error("Failed to enumerate devices", error);
+    setStatus(`Could not list camera devices: ${error?.name || "Error"}${error?.message ? ` - ${error.message}` : ""}`);
   }
+}
+
+
+function authorizeRoom(roomCode = "") {
+  return new Promise((resolve, reject) => {
+    socket.emit("authorize-room", { roomCode }, (response) => {
+      if (!response || !response.ok) {
+        reject(new Error(response?.error || "Access denied"));
+        return;
+      }
+      resolve(response);
+    });
+  });
 }
 
 async function replacePeerTracks(stream) {
@@ -570,15 +610,52 @@ async function replacePeerTracks(stream) {
 }
 
 async function startSelectedCameraStream() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("getUserMedia is not supported in this browser/context.");
+  }
+
   selectedCameraDeviceId = cameraDeviceId();
   console.log("[MediaDevices] selected deviceId", selectedCameraDeviceId || "default");
-  const stream = await navigator.mediaDevices.getUserMedia(localMediaConstraints());
-  console.log("[MediaDevices] stream started", {
-    deviceId: selectedCameraDeviceId || "default",
-    audioTracks: stream.getAudioTracks().length,
-    videoTracks: stream.getVideoTracks().length
-  });
-  return stream;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(localMediaConstraints());
+    console.log("[MediaDevices] stream started", {
+      deviceId: selectedCameraDeviceId || "default",
+      audioTracks: stream.getAudioTracks().length,
+      videoTracks: stream.getVideoTracks().length
+    });
+    return stream;
+  } catch (error) {
+    console.error("[MediaDevices] getUserMedia failed", {
+      name: error?.name,
+      message: error?.message,
+      constraint: error?.constraint,
+      selectedCameraDeviceId
+    });
+    const recoverableDeviceError = selectedCameraDeviceId && (error?.name === "OverconstrainedError" || error?.name === "NotFoundError");
+    if (!recoverableDeviceError) throw error;
+
+    console.warn("[MediaDevices] selected device failed, retrying default camera", {
+      selectedCameraDeviceId,
+      name: error?.name,
+      message: error?.message
+    });
+
+    selectedCameraDeviceId = "";
+    cameraSelectInput.value = "";
+    return navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1280, max: 1920 },
+        height: { ideal: 720, max: 1080 },
+        frameRate: { ideal: 24, max: 30 },
+        facingMode: "user"
+      },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+  }
 }
 
 async function switchCameraStream() {
@@ -718,6 +795,7 @@ function leaveRoom() {
   socket.emit("leave-room");
   clearPeersAndVideos();
   stopLocalStream();
+  localParticipantId = "";
   role = null;
 }
 
@@ -727,25 +805,32 @@ function disconnectAndReturnToRoleScreen() {
   setStatus("Disconnected from the room.");
 }
 
-function connectRoom() {
-  const enteredRoom = roomId();
+async function connectRoom() {
+  const enteredRoomCode = roomId();
 
-  if (!enteredRoom) {
-    alert("Enter your room key.");
+  if (!validateRoomCodeInput(enteredRoomCode)) {
+    alert("Enter room number (e.g. FRONTDOOR) or full room code (e.g. FRONTDOOR:k_xxx).");
     return;
   }
 
-  if (!validateRoomId(enteredRoom)) {
-    alert("Room key must be 3-24 characters (letters, numbers, - or _)."
+  try {
+    await ensureSocketConnected();
+    const authorization = await authorizeRoom(enteredRoomCode);
+    currentRoomId = authorization.roomId;
+    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
+    currentAccessKey = authorization.accessKey;
+    currentRoomCode = authorization.roomCode || currentRoomCode;
+    roomIdInput.value = "";
+    saveSession();
+    showScreen(roleScreen);
+    setStatus(
+      authorization.created
+        ? `Room ${currentRoomNumber} created. Share code: ${currentRoomCode}`
+        : "Access granted. Choose camera or viewer."
     );
-    return;
+  } catch (error) {
+    setStatus(error?.message || "Room authorization failed.");
   }
-
-  currentRoomId = enteredRoom;
-  roomIdInput.value = "";
-  setStatus("Access granted. Choose camera or viewer.");
-  saveSession();
-  showScreen(roleScreen);
 }
 
 function localMediaConstraints() {
@@ -925,7 +1010,9 @@ function toggleCamera() {
   }
 
   videoTrack.enabled = !videoTrack.enabled;
-  cameraVideoStates.set(socket.id, videoTrack.enabled);
+  if (localParticipantId) {
+    cameraVideoStates.set(localParticipantId, videoTrack.enabled);
+  }
   setTileMediaBadges("local", localStream.getAudioTracks()[0]?.enabled ?? false, videoTrack.enabled);
   setTileVideoToggleButton("local", videoTrack.enabled);
   setTilePlaceholder("local", !videoTrack.enabled, "Camera is off");
@@ -933,6 +1020,14 @@ function toggleCamera() {
   socket.emit("camera-video-state", { enabled: videoTrack.enabled });
   setStatus(videoTrack.enabled ? "Camera enabled." : "Camera disabled.");
 }
+
+socket.on("session-authorized", ({ roomId, roomNumber, participantId, accessKey, roomCode }) => {
+  currentRoomId = roomId || currentRoomId;
+  currentRoomNumber = roomNumber || currentRoomNumber;
+  currentAccessKey = accessKey || currentAccessKey;
+  currentRoomCode = roomCode || currentRoomCode;
+  localParticipantId = participantId || "";
+});
 
 socket.on("existing-cameras", (cameras) => {
   if (role !== "viewer") return;
@@ -1011,7 +1106,7 @@ socket.on("camera-video-state", ({ id, enabled }) => {
   const cameraEnabled = enabled !== false;
   cameraVideoStates.set(id, cameraEnabled);
 
-  const cardId = id === socket.id && role === "camera" ? "local" : id;
+  const cardId = id === localParticipantId && role === "camera" ? "local" : id;
   if (!document.getElementById(`card-${cardId}`)) return;
 
   const micOn = tileMediaStates.get(cardId)?.micOn ?? (cardId === "local" ? localStream?.getAudioTracks?.()[0]?.enabled ?? false : false);
@@ -1026,11 +1121,16 @@ socket.on("camera-video-state", ({ id, enabled }) => {
 });
 
 async function restoreSessionAfterReconnect() {
-  if (!role || !currentRoomId) return;
+  if (!role || !currentRoomCode) return;
 
   clearPeersAndVideos();
 
   try {
+    const authorization = await authorizeRoom(currentRoomCode);
+    currentRoomId = authorization.roomId;
+    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
+    currentAccessKey = authorization.accessKey;
+    currentRoomCode = authorization.roomCode || currentRoomCode;
     await joinRoomWithRole(role);
     if (role === "camera" && localStream) {
       mountLocalTile(localStream, cameraName() || "You (camera)");
@@ -1074,6 +1174,9 @@ roomIdInput.addEventListener("keydown", (event) => {
 changeRoomBtn.addEventListener("click", () => {
   leaveRoom();
   currentRoomId = "";
+  currentRoomNumber = "";
+  currentAccessKey = "";
+  currentRoomCode = "";
   roomIdInput.value = "";
   cameraNameInput.value = "";
   localStorage.removeItem("camdeck-session");
@@ -1118,21 +1221,33 @@ stopRecordingBtn.addEventListener("click", stopRecording);
 
 rejoinLastBtn.addEventListener("click", async () => {
   const previous = loadSession();
-  if (!previous?.roomId) {
+  if (!previous?.roomCode) {
     setStatus("No previous session found.");
     return;
   }
 
-  currentRoomId = normalizeRoomId(previous.roomId);
+  currentRoomCode = normalizeRoomCode(previous.roomCode);
+  currentRoomId = "";
   roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
-  showScreen(roleScreen);
-  setStatus("Last session loaded.");
 
-  if (previous.role === "camera") {
-    await startCamera();
-  } else if (previous.role === "viewer") {
-    await startViewer();
+  try {
+    await ensureSocketConnected();
+    const authorization = await authorizeRoom(currentRoomCode);
+    currentRoomId = authorization.roomId;
+    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
+    currentAccessKey = authorization.accessKey;
+    currentRoomCode = authorization.roomCode || currentRoomCode;
+    showScreen(roleScreen);
+    setStatus("Last session loaded.");
+
+    if (previous.role === "camera") {
+      await startCamera();
+    } else if (previous.role === "viewer") {
+      await startViewer();
+    }
+  } catch (error) {
+    setStatus(error?.message || "Could not restore previous session.");
   }
 });
 
