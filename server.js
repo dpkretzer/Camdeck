@@ -232,19 +232,38 @@ io.on('connection', (socket) => {
       room = rooms.get(authorizedRoomId) || null;
     }
 
-    // 2) If a roomId was provided, it must match a real room.
+    // 2) Resolve requestedRoomId as either real room id or room number -> real room id.
     if (!room && normalizedRequestedRoomId) {
-      room = rooms.get(normalizedRequestedRoomId) || null;
+      const requestedAsRoomId = rooms.get(normalizedRequestedRoomId) || null;
+      if (requestedAsRoomId) {
+        room = requestedAsRoomId;
+      } else if (normalizedRequestedRoomNumber) {
+        const resolvedRoomId = roomByNumber.get(normalizedRequestedRoomNumber);
+        if (resolvedRoomId) {
+          room = rooms.get(resolvedRoomId) || null;
+        }
+      }
     }
 
-    // 3) If still no room, try access key.
+    // 3) Resolve parsed room number from roomCode -> real room id.
+    if (!room && parsedRoomNumber) {
+      const resolvedRoomId = roomByNumber.get(parsedRoomNumber);
+      if (resolvedRoomId) {
+        room = rooms.get(resolvedRoomId) || null;
+      }
+    }
+
+    // 4) If still no room, try access key.
     if (!room && providedAccessKey) {
       room = getRoomByAccessKey(providedAccessKey) || null;
     }
 
-    // 4) Enforce consistency checks.
-    if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
-      room = null;
+    // 5) Enforce consistency checks.
+    if (room && normalizedRequestedRoomId) {
+      const requestedMatchesRoom = room.id === normalizedRequestedRoomId || room.roomNumber === normalizedRequestedRoomNumber;
+      if (!requestedMatchesRoom) {
+        room = null;
+      }
     }
 
     if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
@@ -267,7 +286,7 @@ io.on('connection', (socket) => {
     });
 
     if (!room) {
-      rejectJoin('Unauthorized room access.');
+      rejectJoin('Room not found.');
       return;
     }
 
