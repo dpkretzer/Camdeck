@@ -53,6 +53,7 @@ const cameraVideoStates = new Map();
 const tileMediaStates = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
+const pendingRemoteVideoToggle = new Set();
 
 function normalizeRoomCode(value) {
   const trimmed = value.trim();
@@ -480,11 +481,18 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   videoToggleBtn.id = `video-toggle-${id}`;
   videoToggleBtn.className = "secondary px-2 py-1 text-[10px]";
   videoToggleBtn.textContent = "Camera off";
-  videoToggleBtn.disabled = !isLocal || role !== "camera";
+  const canToggleLocal = isLocal && role === "camera";
+  const canToggleRemote = !isLocal && role === "viewer";
+  videoToggleBtn.disabled = !(canToggleLocal || canToggleRemote);
   videoToggleBtn.classList.toggle("opacity-50", videoToggleBtn.disabled);
-  videoToggleBtn.addEventListener("click", () => {
+  videoToggleBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
     if (id === "local") {
       toggleCamera();
+      return;
+    }
+    if (role === "viewer") {
+      requestViewerCameraToggle(id);
     }
   });
   tileControls.append(videoToggleBtn);
@@ -549,6 +557,37 @@ function setTileVideoToggleButton(id, camOn) {
   const toggleBtn = document.getElementById(`video-toggle-${id}`);
   if (!toggleBtn) return;
   toggleBtn.textContent = camOn ? "Camera off" : "Camera on";
+}
+
+function requestViewerCameraToggle(id) {
+  if (role !== "viewer" || !id || pendingRemoteVideoToggle.has(id)) return;
+
+  const toggleBtn = document.getElementById(`video-toggle-${id}`);
+  const currentlyEnabled = cameraVideoStates.get(id) !== false;
+  const nextEnabled = !currentlyEnabled;
+
+  pendingRemoteVideoToggle.add(id);
+  if (toggleBtn) {
+    toggleBtn.disabled = true;
+    toggleBtn.classList.add("opacity-50");
+  }
+
+  socket.emit("viewer-camera-video-toggle", { targetCameraId: id, enabled: nextEnabled }, (response) => {
+    pendingRemoteVideoToggle.delete(id);
+    if (toggleBtn) {
+      toggleBtn.disabled = false;
+      toggleBtn.classList.remove("opacity-50");
+    }
+
+    if (!response?.ok) {
+      const errorMessage = response?.error || "Could not change camera state.";
+      setStatus(errorMessage);
+      showToast(errorMessage, "error");
+      return;
+    }
+
+    setStatus(`Requested ${cameraNames.get(id) || "camera"} ${nextEnabled ? "on" : "off"}.`);
+  });
 }
 
 function clearPeersAndVideos() {
@@ -1252,6 +1291,27 @@ function toggleCamera() {
   socket.emit("camera-video-state", { enabled: videoTrack.enabled });
   setStatus(videoTrack.enabled ? "Camera enabled." : "Camera disabled.");
 }
+
+socket.on("camera-video-command", ({ enabled, requestedBy }) => {
+  if (role !== "camera" || !localStream) return;
+
+  const [videoTrack] = localStream.getVideoTracks();
+  if (!videoTrack) return;
+
+  const nextEnabled = enabled !== false;
+  if (videoTrack.enabled === nextEnabled) return;
+
+  videoTrack.enabled = nextEnabled;
+  if (localParticipantId) {
+    cameraVideoStates.set(localParticipantId, nextEnabled);
+  }
+  setTileMediaBadges("local", localStream.getAudioTracks()[0]?.enabled ?? false, nextEnabled);
+  setTileVideoToggleButton("local", nextEnabled);
+  setTilePlaceholder("local", !nextEnabled, "Camera is off");
+  applyLocalControlButtons();
+  socket.emit("camera-video-state", { enabled: nextEnabled });
+  setStatus(`Camera ${nextEnabled ? "enabled" : "disabled"}${requestedBy ? ` by ${requestedBy}` : ""}.`);
+});
 
 socket.on("session-authorized", ({ roomId, roomNumber, participantId, accessKey, roomCode }) => {
   if (!role) {
