@@ -134,8 +134,8 @@ window.addEventListener("error", (event) => {
 
 function setConnectionBadge(connected) {
   connectionBadge.textContent = connected ? "Server connection: online" : "Server connection: offline";
-  connectionBadge.classList.toggle("text-emerald-300", connected);
-  connectionBadge.classList.toggle("text-rose-300", !connected);
+  connectionBadge.classList.toggle("online", connected);
+  connectionBadge.classList.toggle("offline", !connected);
 }
 
 function roomId() {
@@ -431,7 +431,7 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   badges.id = `badges-${id}`;
   badges.append(
     createStatusBadge("Mic on", "bg-emerald-500/20 text-emerald-200"),
-    createStatusBadge("Cam on", "bg-cyan-500/20 text-cyan-200")
+    createStatusBadge("Live", "bg-cyan-500/20 text-cyan-200")
   );
 
   const tileControls = document.createElement("div");
@@ -492,7 +492,7 @@ function setTileMediaBadges(id, micOn, camOn) {
   badges.innerHTML = "";
   badges.append(
     createStatusBadge(micOn ? "Mic on" : "Mic off", micOn ? "bg-emerald-500/20 text-emerald-200" : "bg-rose-500/20 text-rose-200"),
-    createStatusBadge(camOn ? "Cam on" : "Cam off", camOn ? "bg-cyan-500/20 text-cyan-200" : "bg-amber-500/20 text-amber-200")
+    createStatusBadge(camOn ? "Live" : "Offline", camOn ? "bg-cyan-500/20 text-cyan-200" : "bg-amber-500/20 text-amber-200")
   );
 }
 

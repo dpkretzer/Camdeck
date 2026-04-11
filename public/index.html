@@ -48,33 +48,37 @@
       </section>
 
       <section id="liveScreen" class="screen glass-panel live-panel">
-        <div class="live-top-row">
-          <div class="control-row dense">
-            <button id="toggleMute" class="secondary">Mute</button>
-            <button id="toggleCamera" class="secondary">Camera off</button>
-            <button id="startRecording" class="record">Start Recording</button>
-            <button id="stopRecording" class="stop">Stop Recording</button>
-            <button id="toggleMotionFollow" class="secondary">Motion follow: Off</button>
-            <button id="toggleLayout" class="secondary">Focus layout</button>
-            <button id="disconnectRoom" class="danger">Disconnect</button>
+        <section class="live-section live-header">
+          <div class="live-top-row">
+            <div class="control-row dense">
+              <button id="toggleMute" class="secondary">Mute</button>
+              <button id="toggleCamera" class="secondary">Camera off</button>
+              <button id="startRecording" class="record">Start Recording</button>
+              <button id="stopRecording" class="stop">Stop Recording</button>
+              <button id="toggleMotionFollow" class="secondary">Motion follow: Off</button>
+              <button id="toggleLayout" class="secondary">Focus layout</button>
+              <button id="disconnectRoom" class="danger">Disconnect</button>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div class="status-row">
-          <div id="statusMessage" class="status-text" role="status" aria-live="polite"></div>
-          <div id="connectionBadge" class="connection-badge">Connecting…</div>
-        </div>
+        <section class="live-section live-status-controls">
+          <div class="status-row">
+            <div id="statusMessage" class="status-text" role="status" aria-live="polite"></div>
+            <div id="connectionBadge" class="connection-badge">Connecting…</div>
+          </div>
+          <button id="retryPlayback" class="secondary retry-btn">Tap if video doesn't play</button>
+        </section>
 
-        <p id="emptyState" class="empty-state">No camera yet. Waiting for a camera to join…</p>
+        <section class="live-section live-grid-section">
+          <p id="emptyState" class="empty-state">No cameras connected – deploy a camera.</p>
+          <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
+        </section>
 
-        <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
-
-        <section id="timelinePanel" class="timeline-panel" aria-live="polite">
+        <section id="timelinePanel" class="timeline-panel live-section" aria-live="polite">
           <h2 class="panel-title">Session timeline</h2>
           <ul id="sessionTimeline"></ul>
         </section>
-
-        <button id="retryPlayback" class="secondary retry-btn">Tap if video doesn't play</button>
       </section>
     </div>
   </main>
