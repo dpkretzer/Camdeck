@@ -29,7 +29,9 @@ const startViewerBtn = document.getElementById("startViewer");
 const remoteVideos = document.getElementById("remoteVideos");
 
 let currentRoomId = "";
+let currentRoomNumber = "";
 let currentAccessKey = "";
+let currentRoomCode = "";
 let role = null;
 let localStream = null;
 let localParticipantId = "";
@@ -49,12 +51,20 @@ const tileMediaStates = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
-function normalizeRoomId(value) {
+function normalizeRoomCode(value) {
   return value.trim();
 }
 
-function validateAccessKey(nextAccessKey) {
-  return !nextAccessKey || /^k_[A-Za-z0-9_-]{8,}$/.test(nextAccessKey);
+function validateRoomCodeInput(value) {
+  const normalized = value.trim();
+  if (!normalized) return false;
+
+  if (normalized.includes(":")) {
+    const [roomNumber, accessKey] = normalized.split(":");
+    return /^[A-Z0-9_-]{3,24}$/i.test((roomNumber || "").trim()) && /^k_[A-Za-z0-9_-]{8,}$/.test((accessKey || "").trim());
+  }
+
+  return /^[A-Z0-9_-]{3,24}$/i.test(normalized);
 }
 
 function showScreen(screen) {
@@ -84,7 +94,7 @@ function setConnectionBadge(connected) {
 }
 
 function roomId() {
-  return normalizeRoomId(roomIdInput.value.trim());
+  return normalizeRoomCode(roomIdInput.value.trim());
 }
 
 function cameraName() {
@@ -96,12 +106,14 @@ function cameraDeviceId() {
 }
 
 function saveSession(nextRole = role) {
-  if (!currentRoomId || !currentAccessKey) return;
+  if (!currentRoomId || !currentAccessKey || !currentRoomCode) return;
   localStorage.setItem(
     "camdeck-session",
     JSON.stringify({
       roomId: currentRoomId,
+      roomNumber: currentRoomNumber,
       accessKey: currentAccessKey,
+      roomCode: currentRoomCode,
       role: nextRole || null,
       cameraName: cameraName()
     })
@@ -553,9 +565,9 @@ async function refreshCameraDevices() {
 }
 
 
-function authorizeRoom(accessKey = "") {
+function authorizeRoom(roomCode = "") {
   return new Promise((resolve, reject) => {
-    socket.emit("authorize-room", { accessKey }, (response) => {
+    socket.emit("authorize-room", { roomCode }, (response) => {
       if (!response || !response.ok) {
         reject(new Error(response?.error || "Access denied"));
         return;
@@ -748,24 +760,26 @@ function disconnectAndReturnToRoleScreen() {
 }
 
 async function connectRoom() {
-  const enteredAccessKey = roomId();
+  const enteredRoomCode = roomId().toUpperCase();
 
-  if (!validateAccessKey(enteredAccessKey)) {
-    alert("Access key format is invalid.");
+  if (!validateRoomCodeInput(enteredRoomCode)) {
+    alert("Enter room number (e.g. FRONTDOOR) or full room code (e.g. FRONTDOOR:k_xxx).");
     return;
   }
 
   try {
     await ensureSocketConnected();
-    const authorization = await authorizeRoom(enteredAccessKey);
+    const authorization = await authorizeRoom(enteredRoomCode);
     currentRoomId = authorization.roomId;
+    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
     currentAccessKey = authorization.accessKey;
+    currentRoomCode = authorization.roomCode || currentRoomCode;
     roomIdInput.value = "";
     saveSession();
     showScreen(roleScreen);
     setStatus(
       authorization.created
-        ? `Secure room created. Share this access key: ${currentAccessKey}`
+        ? `Room ${currentRoomNumber} created. Share code: ${currentRoomCode}`
         : "Access granted. Choose camera or viewer."
     );
   } catch (error) {
@@ -961,9 +975,11 @@ function toggleCamera() {
   setStatus(videoTrack.enabled ? "Camera enabled." : "Camera disabled.");
 }
 
-socket.on("session-authorized", ({ roomId, participantId, accessKey }) => {
+socket.on("session-authorized", ({ roomId, roomNumber, participantId, accessKey, roomCode }) => {
   currentRoomId = roomId || currentRoomId;
+  currentRoomNumber = roomNumber || currentRoomNumber;
   currentAccessKey = accessKey || currentAccessKey;
+  currentRoomCode = roomCode || currentRoomCode;
   localParticipantId = participantId || "";
 });
 
@@ -1059,14 +1075,16 @@ socket.on("camera-video-state", ({ id, enabled }) => {
 });
 
 async function restoreSessionAfterReconnect() {
-  if (!role || !currentAccessKey) return;
+  if (!role || !currentRoomCode) return;
 
   clearPeersAndVideos();
 
   try {
-    const authorization = await authorizeRoom(currentAccessKey);
+    const authorization = await authorizeRoom(currentRoomCode);
     currentRoomId = authorization.roomId;
+    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
     currentAccessKey = authorization.accessKey;
+    currentRoomCode = authorization.roomCode || currentRoomCode;
     await joinRoomWithRole(role);
     if (role === "camera" && localStream) {
       mountLocalTile(localStream, cameraName() || "You (camera)");
@@ -1110,7 +1128,9 @@ roomIdInput.addEventListener("keydown", (event) => {
 changeRoomBtn.addEventListener("click", () => {
   leaveRoom();
   currentRoomId = "";
+  currentRoomNumber = "";
   currentAccessKey = "";
+  currentRoomCode = "";
   roomIdInput.value = "";
   cameraNameInput.value = "";
   localStorage.removeItem("camdeck-session");
@@ -1155,21 +1175,23 @@ stopRecordingBtn.addEventListener("click", stopRecording);
 
 rejoinLastBtn.addEventListener("click", async () => {
   const previous = loadSession();
-  if (!previous?.accessKey) {
+  if (!previous?.roomCode) {
     setStatus("No previous session found.");
     return;
   }
 
-  currentAccessKey = normalizeRoomId(previous.accessKey);
+  currentRoomCode = normalizeRoomCode(previous.roomCode).toUpperCase();
   currentRoomId = "";
   roomIdInput.value = "";
   cameraNameInput.value = previous.cameraName || "";
 
   try {
     await ensureSocketConnected();
-    const authorization = await authorizeRoom(currentAccessKey);
+    const authorization = await authorizeRoom(currentRoomCode);
     currentRoomId = authorization.roomId;
+    currentRoomNumber = authorization.roomNumber || currentRoomNumber;
     currentAccessKey = authorization.accessKey;
+    currentRoomCode = authorization.roomCode || currentRoomCode;
     showScreen(roleScreen);
     setStatus("Last session loaded.");
 

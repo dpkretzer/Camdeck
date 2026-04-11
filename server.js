@@ -20,6 +20,7 @@ app.get('/', (req, res) => {
 
 const rooms = new Map();
 const roomByAccessKey = new Map();
+const roomByNumber = new Map();
 const participantBySocketId = new Map();
 
 function generateId(bytes = 16) {
@@ -38,6 +39,14 @@ function buildAccessKey() {
   return `k_${generateId(18)}`;
 }
 
+function normalizeRoomNumber(value) {
+  return typeof value === 'string' ? value.trim().toUpperCase() : '';
+}
+
+function isValidRoomNumber(value) {
+  return /^[A-Z0-9_-]{3,24}$/.test(value);
+}
+
 function sanitizeLabel(value, fallback) {
   if (typeof value !== 'string') return fallback;
   const collapsed = value.replace(/\s+/g, ' ').trim();
@@ -45,11 +54,12 @@ function sanitizeLabel(value, fallback) {
   return collapsed.slice(0, 24);
 }
 
-function createRoom() {
+function createRoom(roomNumber) {
   const roomId = buildRoomId();
   const accessKey = buildAccessKey();
   const room = {
     id: roomId,
+    roomNumber,
     accessKey,
     members: new Set(),
     cameras: new Set(),
@@ -58,6 +68,7 @@ function createRoom() {
 
   rooms.set(roomId, room);
   roomByAccessKey.set(accessKey, roomId);
+  roomByNumber.set(roomNumber, roomId);
   return room;
 }
 
@@ -92,6 +103,25 @@ function cleanupRoomIfEmpty(room) {
   if (room.members.size > 0) return;
   rooms.delete(room.id);
   roomByAccessKey.delete(room.accessKey);
+  roomByNumber.delete(room.roomNumber);
+}
+
+function parseRoomCode(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return { roomNumber: '', accessKey: '' };
+
+  const [roomPart, accessPart] = raw.split(':');
+  if (accessPart) {
+    return {
+      roomNumber: normalizeRoomNumber(roomPart),
+      accessKey: accessPart.trim()
+    };
+  }
+
+  return {
+    roomNumber: normalizeRoomNumber(raw),
+    accessKey: ''
+  };
 }
 
 io.on('connection', (socket) => {
@@ -127,21 +157,36 @@ io.on('connection', (socket) => {
     cleanupRoomIfEmpty(room);
   }
 
-  socket.on('authorize-room', ({ accessKey }, callback) => {
-    const normalizedKey = typeof accessKey === 'string' ? accessKey.trim() : '';
+  socket.on('authorize-room', ({ roomCode }, callback) => {
+    const { roomNumber, accessKey } = parseRoomCode(roomCode);
 
     let room;
     let created = false;
-    if (normalizedKey) {
-      room = getRoomByAccessKey(normalizedKey);
-      if (!room) {
+    if (accessKey) {
+      room = getRoomByAccessKey(accessKey);
+      if (!room || room.roomNumber !== roomNumber) {
         if (typeof callback === 'function') {
-          callback({ ok: false, error: 'Invalid access key.' });
+          callback({ ok: false, error: 'Invalid room code.' });
         }
         return;
       }
     } else {
-      room = createRoom();
+      if (!isValidRoomNumber(roomNumber)) {
+        if (typeof callback === 'function') {
+          callback({ ok: false, error: 'Room number must be 3-24 chars (A-Z, 0-9, _, -).' });
+        }
+        return;
+      }
+
+      const existingRoomId = roomByNumber.get(roomNumber);
+      if (existingRoomId) {
+        if (typeof callback === 'function') {
+          callback({ ok: false, error: 'Room exists. Enter full room code: ROOM:KEY' });
+        }
+        return;
+      }
+
+      room = createRoom(roomNumber);
       created = true;
     }
 
@@ -151,8 +196,10 @@ io.on('connection', (socket) => {
       callback({
         ok: true,
         created,
+        roomNumber: room.roomNumber,
         roomId: room.id,
-        accessKey: room.accessKey
+        accessKey: room.accessKey,
+        roomCode: `${room.roomNumber}:${room.accessKey}`
       });
     }
   });
@@ -203,10 +250,12 @@ io.on('connection', (socket) => {
     socket.join(room.id);
 
     socket.emit('session-authorized', {
+      roomNumber: room.roomNumber,
       roomId: room.id,
       participantId,
       role,
-      accessKey: room.accessKey
+      accessKey: room.accessKey,
+      roomCode: `${room.roomNumber}:${room.accessKey}`
     });
 
     if (role === 'viewer') {
