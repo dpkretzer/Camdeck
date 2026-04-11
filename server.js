@@ -214,6 +214,7 @@ io.on('connection', (socket) => {
   socket.on('join-room', ({ role, name, label, videoEnabled, roomId: requestedRoomId, accessKey, roomCode }, callback) => {
     const { roomNumber: parsedRoomNumber, accessKey: parsedAccessKey } = parseRoomCode(roomCode);
     const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
+    const normalizedRequestedRoomNumber = normalizeRoomNumber(normalizedRequestedRoomId);
     const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
     const providedAccessKey = normalizedAccessKey || parsedAccessKey;
     const authorizedRoomId = socket.data.authorizedRoomId;
