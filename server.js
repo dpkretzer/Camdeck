@@ -214,6 +214,7 @@ io.on('connection', (socket) => {
   socket.on('join-room', ({ role, name, label, videoEnabled, roomId: requestedRoomId, accessKey, roomCode }, callback) => {
     const { roomNumber: parsedRoomNumber, accessKey: parsedAccessKey } = parseRoomCode(roomCode);
     const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
+    const normalizedRequestedRoomNumber = normalizeRoomNumber(normalizedRequestedRoomId);
     const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
     const providedAccessKey = normalizedAccessKey || parsedAccessKey;
     const authorizedRoomId = socket.data.authorizedRoomId;
@@ -226,32 +227,41 @@ io.on('connection', (socket) => {
 
     let room = null;
 
-    // 1) Prefer prior authorization from authorize-room (per-socket protection).
-    if (priorAuthorizedRoomId) {
-      room = rooms.get(priorAuthorizedRoomId) || null;
+    // 1) Prefer prior authorization for this socket.
+    if (authorizedRoomId) {
+      room = rooms.get(authorizedRoomId) || null;
     }
 
-    // 2) If not previously authorized, resolve by access key (explicit or from roomCode).
-    // 1) If roomId was provided, it must resolve to a room.
-    if (normalizedRequestedRoomId) {
+    // 2) Resolve requestedRoomId as either real room id or room number.
+    if (!room && normalizedRequestedRoomId) {
       room = rooms.get(normalizedRequestedRoomId) || null;
-      if (!room) {
-        rejectJoin('Unauthorized room access.');
-        return;
+      if (!room && normalizedRequestedRoomNumber) {
+        const roomIdFromNumber = roomByNumber.get(normalizedRequestedRoomNumber);
+        if (roomIdFromNumber) {
+          room = rooms.get(roomIdFromNumber) || null;
+        }
       }
     }
 
-    // 2) If no roomId, resolve by key when present.
+    // 3) Resolve parsed room number when roomCode was provided without key.
+    if (!room && parsedRoomNumber) {
+      const roomIdFromParsedNumber = roomByNumber.get(parsedRoomNumber);
+      if (roomIdFromParsedNumber) {
+        room = rooms.get(roomIdFromParsedNumber) || null;
+      }
+    }
+
+    // 4) If still no room, try access key.
     if (!room && providedAccessKey) {
       room = getRoomByAccessKey(providedAccessKey) || null;
     }
 
-    if (!room && authorizedRoomId) {
-      room = rooms.get(authorizedRoomId) || null;
-    }
-
-    if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
-      room = null;
+    // 5) Enforce consistency checks.
+    if (room && normalizedRequestedRoomId) {
+      const requestedMatchesRoom = room.id === normalizedRequestedRoomId || room.roomNumber === normalizedRequestedRoomNumber;
+      if (!requestedMatchesRoom) {
+        room = null;
+      }
     }
 
     if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
@@ -274,18 +284,6 @@ io.on('connection', (socket) => {
     });
 
     if (!room) {
-      rejectJoin('Unauthorized room access.');
-      return;
-    }
-
-    // If accessKey is provided, enforce it against resolved room.
-    if (providedAccessKey && room.accessKey !== providedAccessKey) {
-      rejectJoin('Unauthorized room access.');
-      return;
-    }
-
-    // If roomCode includes room number, enforce room number match.
-    if (parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
       rejectJoin('Unauthorized room access.');
       return;
     }
