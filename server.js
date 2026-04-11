@@ -236,15 +236,6 @@ io.on('connection', (socket) => {
     }
 
     // 2) If no roomId, resolve by key when present.
-
-    const authorizedRoomId = socket.data.authorizedRoomId;
-    let room = null;
-
-    // Prefer explicit credentials from payload. Fall back to socket-scoped authorization.
-    if (normalizedRequestedRoomId) {
-      room = rooms.get(normalizedRequestedRoomId) || null;
-    }
-
     if (!room && providedAccessKey) {
       room = getRoomByAccessKey(providedAccessKey) || null;
     }
