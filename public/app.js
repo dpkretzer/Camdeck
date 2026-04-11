@@ -43,6 +43,7 @@ let selectedCameraDeviceId = "";
 const peers = new Map();
 const cameraNames = new Map();
 const cameraVideoStates = new Map();
+const tileMediaStates = new Map();
 const motionWatchers = new Map();
 const lastMotionLogAt = new Map();
 
@@ -348,6 +349,7 @@ function setTileLoading(id, visible, message = "Loading video…") {
 function setTileMediaBadges(id, micOn, camOn) {
   const badges = document.getElementById(`badges-${id}`);
   if (!badges) return;
+  tileMediaStates.set(id, { micOn, camOn });
   badges.innerHTML = "";
   badges.append(
     createStatusBadge(micOn ? "Mic on" : "Mic off", micOn ? "bg-emerald-500/20 text-emerald-200" : "bg-rose-500/20 text-rose-200"),
@@ -366,6 +368,7 @@ function clearPeersAndVideos() {
   peers.clear();
   cameraNames.clear();
   cameraVideoStates.clear();
+  tileMediaStates.clear();
   motionWatchers.forEach(({ intervalId }) => clearInterval(intervalId));
   motionWatchers.clear();
   lastMotionLogAt.clear();
@@ -1011,10 +1014,7 @@ socket.on("camera-video-state", ({ id, enabled }) => {
   const cardId = id === socket.id && role === "camera" ? "local" : id;
   if (!document.getElementById(`card-${cardId}`)) return;
 
-  const micOn =
-    cardId === "local"
-      ? localStream?.getAudioTracks?.()[0]?.enabled ?? false
-      : document.getElementById(`badges-${cardId}`)?.textContent?.includes("Mic on") ?? false;
+  const micOn = tileMediaStates.get(cardId)?.micOn ?? (cardId === "local" ? localStream?.getAudioTracks?.()[0]?.enabled ?? false : false);
 
   setTileMediaBadges(cardId, micOn, cameraEnabled);
   setTileVideoToggleButton(cardId, cameraEnabled);

@@ -50,6 +50,7 @@ io.on('connection', (socket) => {
     delete socket.data.roomId;
     delete socket.data.role;
     delete socket.data.label;
+    delete socket.data.videoEnabled;
   }
 
   socket.on('join-room', ({ roomId, role, name, label, videoEnabled }, callback) => {

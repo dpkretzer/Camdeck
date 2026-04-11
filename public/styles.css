@@ -271,6 +271,13 @@ button.danger { background: linear-gradient(180deg, rgba(89, 27, 41, 0.78), rgba
   letter-spacing: 0.07em;
 }
 
+#remoteVideos [id^="video-toggle-"] {
+  width: auto;
+  min-width: 88px;
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
 .timeline-panel {
   margin-top: 10px;
   border-top: 1px solid rgba(80, 165, 222, 0.2);
