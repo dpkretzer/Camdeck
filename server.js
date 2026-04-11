@@ -216,7 +216,7 @@ io.on('connection', (socket) => {
     const normalizedRequestedRoomId = typeof requestedRoomId === 'string' ? requestedRoomId.trim() : '';
     const normalizedAccessKey = typeof accessKey === 'string' ? accessKey.trim() : '';
     const providedAccessKey = normalizedAccessKey || parsedAccessKey;
-    const priorAuthorizedRoomId = socket.data.authorizedRoomId;
+    const authorizedRoomId = socket.data.authorizedRoomId;
 
     function rejectJoin(message) {
       if (typeof callback === 'function') {
@@ -240,14 +240,25 @@ io.on('connection', (socket) => {
       room = getRoomByAccessKey(providedAccessKey) || null;
     }
 
-    // 3) Backward-compatible fallback to prior socket authorization.
-    if (!room && priorAuthorizedRoomId) {
-      room = rooms.get(priorAuthorizedRoomId) || null;
+    if (!room && authorizedRoomId) {
+      room = rooms.get(authorizedRoomId) || null;
+    }
+
+    if (room && normalizedRequestedRoomId && room.id !== normalizedRequestedRoomId) {
+      room = null;
+    }
+
+    if (room && providedAccessKey && room.accessKey !== providedAccessKey) {
+      room = null;
+    }
+
+    if (room && parsedRoomNumber && room.roomNumber !== parsedRoomNumber) {
+      room = null;
     }
 
     console.log('[Signal] join-room request', {
       socketId: socket.id,
-      authorizedRoomId: priorAuthorizedRoomId,
+      authorizedRoomId,
       requestedRoomId: normalizedRequestedRoomId || undefined,
       role,
       name,
