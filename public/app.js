@@ -122,6 +122,14 @@ function resetRoomContext() {
   currentAccessKey = "";
   currentRoomCode = "";
   localParticipantId = "";
+  activeJoinAttempt += 1;
+  console.log("[Signal] room state cleared", {
+    currentRoomId,
+    currentRoomNumber,
+    hasAccessKey: Boolean(currentAccessKey),
+    hasRoomCode: Boolean(currentRoomCode),
+    activeJoinAttempt
+  });
 }
 
 function applyAuthorizedRoom(authorization, source = "unknown") {
@@ -256,45 +264,57 @@ function ensureSocketConnected() {
   });
 }
 
+async function refreshAuthorizationForJoin(source) {
+  if (!currentRoomCode) {
+    throw new Error("No room code available. Reconnect to a room first.");
+  }
+
+  const authorization = await authorizeRoom(currentRoomCode);
+  applyAuthorizedRoom(authorization, source);
+}
+
 function joinRoomWithRole(roleName) {
   const joinAttempt = ++activeJoinAttempt;
   const [videoTrack] = localStream?.getVideoTracks?.() || [];
-  const authPayload = {
-    roomId: currentRoomId || undefined,
-    accessKey: currentAccessKey || undefined,
-    roomCode: currentRoomCode || undefined
-  };
+  return refreshAuthorizationForJoin(`joinRoomWithRole:${roleName}`).then(() => {
+    const authPayload = {
+      roomId: currentRoomId || undefined,
+      accessKey: currentAccessKey || undefined,
+      roomCode: currentRoomCode || undefined
+    };
 
-  console.log("[Signal] join-room auth payload", {
-    role: roleName,
-    roomId: authPayload.roomId,
-    hasAccessKey: Boolean(authPayload.accessKey),
-    hasRoomCode: Boolean(authPayload.roomCode),
-    joinAttempt
-  });
+    console.log("[Signal] join-room auth payload", {
+      role: roleName,
+      roomId: authPayload.roomId,
+      roomCode: authPayload.roomCode,
+      hasAccessKey: Boolean(authPayload.accessKey),
+      hasRoomCode: Boolean(authPayload.roomCode),
+      joinAttempt
+    });
 
-  return new Promise((resolve, reject) => {
-    socket.emit(
-      "join-room",
-      {
-        role: roleName,
-        name: roleName === "camera" ? cameraName() : "",
-        videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined,
-        ...authPayload
-      },
-      (response) => {
-        if (joinAttempt !== activeJoinAttempt) {
-          console.warn("[Signal] Ignoring stale join-room callback", { joinAttempt, activeJoinAttempt });
-          reject(new Error("Stale join response ignored."));
-          return;
+    return new Promise((resolve, reject) => {
+      socket.emit(
+        "join-room",
+        {
+          role: roleName,
+          name: roleName === "camera" ? cameraName() : "",
+          videoEnabled: roleName === "camera" ? videoTrack?.enabled !== false : undefined,
+          ...authPayload
+        },
+        (response) => {
+          if (joinAttempt !== activeJoinAttempt) {
+            console.warn("[Signal] Ignoring stale join-room callback", { joinAttempt, activeJoinAttempt });
+            reject(new Error("Stale join response ignored."));
+            return;
+          }
+          if (!response || !response.ok) {
+            reject(new Error(response?.error || "Failed to join room"));
+            return;
+          }
+          resolve();
         }
-        if (!response || !response.ok) {
-          reject(new Error(response?.error || "Failed to join room"));
-          return;
-        }
-        resolve();
-      }
-    );
+      );
+    });
   });
 }
 
@@ -853,19 +873,35 @@ function stopRecording() {
   mediaRecorder.stop();
 }
 
-function leaveRoom() {
+function leaveRoom({ disconnectSocket = false, resetRoomState = false, clearStoredSession = false, reason = "manual" } = {}) {
   stopRecording();
-  socket.emit("leave-room");
+  if (socket.connected) {
+    socket.emit("leave-room");
+  }
   clearPeersAndVideos();
   stopLocalStream();
   localParticipantId = "";
   role = null;
+
+  if (disconnectSocket && socket.connected) {
+    socket.disconnect();
+    console.log("[Signal] socket disconnected by client", { reason });
+  }
+
+  if (resetRoomState) {
+    resetRoomContext();
+  }
+
+  if (clearStoredSession) {
+    localStorage.removeItem("camdeck-session");
+    console.log("[Signal] stored session cleared", { reason });
+  }
 }
 
 function disconnectAndReturnToRoleScreen() {
-  leaveRoom();
-  showScreen(roleScreen);
-  setStatus("Disconnected from the room.");
+  leaveRoom({ disconnectSocket: true, resetRoomState: true, clearStoredSession: true, reason: "disconnect_button" });
+  showScreen(homeScreen);
+  setStatus("Disconnected. Room state cleared. Reconnect to join again.");
 }
 
 async function connectRoom() {
@@ -919,7 +955,7 @@ async function startCamera() {
   role = "camera";
   console.log("[WebRTC] startCamera() called", { roomId: currentRoomId });
 
-  if (!currentRoomId) {
+  if (!currentRoomCode) {
     setStatus("Connect to a room first.");
     showScreen(homeScreen);
     return;
@@ -973,7 +1009,7 @@ async function startViewer() {
   role = "viewer";
   console.log("[WebRTC] startViewer() called", { roomId: currentRoomId });
 
-  if (!currentRoomId) {
+  if (!currentRoomCode) {
     setStatus("Connect to a room first.");
     showScreen(homeScreen);
     return;
@@ -1204,8 +1240,6 @@ async function restoreSessionAfterReconnect() {
   clearPeersAndVideos();
 
   try {
-    const authorization = await authorizeRoom(currentRoomCode);
-    applyAuthorizedRoom(authorization, "restoreSessionAfterReconnect");
     await joinRoomWithRole(role);
     if (role === "camera" && localStream) {
       mountLocalTile(localStream, cameraName() || "You (camera)");
@@ -1247,11 +1281,9 @@ roomIdInput.addEventListener("keydown", (event) => {
 });
 
 changeRoomBtn.addEventListener("click", () => {
-  leaveRoom();
-  resetRoomContext();
+  leaveRoom({ disconnectSocket: true, resetRoomState: true, clearStoredSession: true, reason: "change_room" });
   roomIdInput.value = "";
   cameraNameInput.value = "";
-  localStorage.removeItem("camdeck-session");
   showScreen(homeScreen);
   setStatus("");
 });
