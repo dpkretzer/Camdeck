@@ -42,8 +42,6 @@
             <label for="roomId">Room code</label>
             <input id="roomId" type="password" placeholder="Example: FRONTDOOR:k_xxx" inputmode="text" />
 
-            <label for="cameraName">Camera name</label>
-            <input id="cameraName" placeholder="Camera name (optional)" maxlength="24" />
 
             <label for="cameraSelect">Camera device</label>
             <select id="cameraSelect"></select>
@@ -114,6 +112,8 @@
   <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="false"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="viewerPage.js"></script>
+  <script src="cameraController.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
