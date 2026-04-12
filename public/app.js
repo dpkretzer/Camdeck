@@ -102,10 +102,10 @@ function validateRoomCodeInput(value) {
 
   if (normalized.includes(":")) {
     const [roomNumber, accessKey] = normalized.split(":");
-    return /^[A-Z0-9_-]{3,24}$/i.test((roomNumber || "").trim()) && /^k_[A-Za-z0-9_-]{8,}$/.test((accessKey || "").trim());
+    return /^[A-Z0-9_-]{4,24}$/i.test((roomNumber || "").trim()) && /^k_[A-Za-z0-9_-]{8,}$/.test((accessKey || "").trim());
   }
 
-  return /^[A-Z0-9_-]{3,24}$/i.test(normalized);
+  return /^[A-Z0-9_-]{4,24}$/i.test(normalized);
 }
 
 function showScreen(screen) {
@@ -1152,7 +1152,7 @@ async function connectRoom() {
   const enteredRoomCode = roomId();
 
   if (!validateRoomCodeInput(enteredRoomCode)) {
-    alert("Enter room number (e.g. FRONTDOOR) or full room code (e.g. FRONTDOOR:k_xxx).");
+    alert("Enter room number (4-24 chars, A-Z/0-9/_/-) or full room code (e.g. FRONTDOOR:k_xxx).");
     return;
   }
 
