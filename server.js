@@ -105,9 +105,13 @@ function createHttpRateLimiter(windowMs, max) {
   };
 }
 
-function createAllowedOriginChecker(allowedOrigins) {
+function createAllowedOriginChecker(allowedOrigins, { allowAny = false } = {}) {
   const allowed = new Set(allowedOrigins);
   return (origin, callback) => {
+    if (allowAny) {
+      callback(null, true);
+      return;
+    }
     if (!origin || allowed.has(origin)) {
       callback(null, true);
       return;
@@ -178,22 +182,6 @@ function parseRoomCode(rawValue) {
   return {
     roomNumber: (roomPart || '').trim().toUpperCase(),
     accessKey: normalizeAccessKey(accessPart || '')
-function normalizeAccessKey(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizeRole(value) {
-  const role = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  return role === ROLE.CAMERA || role === ROLE.VIEWER ? role : '';
-}
-
-function parseRoomCode(rawValue) {
-  const value = typeof rawValue === 'string' ? rawValue.trim() : '';
-  if (!value) return { roomNumber: '', accessKey: '' };
-  const [roomPart, accessPart] = value.split(':');
-  return {
-    roomNumber: (roomPart || '').trim().toUpperCase(),
-    accessKey: normalizeAccessKey(accessPart || '')
   };
 }
 
@@ -217,28 +205,6 @@ function validateHandshakeAuth(rawAuth) {
 
   return { ok: true, data: normalized };
 }
-
-function validateHandshakeAuth(rawAuth) {
-  if (!rawAuth || typeof rawAuth !== 'object') {
-    return { ok: false, error: 'Invalid credentials' };
-  }
-
-  const normalized = {
-    roomId: normalizeRoomId(rawAuth.roomId),
-    roomCode: typeof rawAuth.roomCode === 'string' ? rawAuth.roomCode.trim() : '',
-    accessKey: normalizeAccessKey(rawAuth.accessKey),
-    role: normalizeRole(rawAuth.role),
-    name: sanitizeName(rawAuth.name || '', 'Participant')
-  };
-
-  if (!normalized.role) return { ok: false, error: 'Invalid credentials' };
-  if (normalized.roomId.length > 128 || normalized.roomCode.length > 256 || normalized.accessKey.length > 256) {
-    return { ok: false, error: 'Invalid credentials' };
-  }
-
-  return { ok: true, data: normalized };
-}
-
 function createJoinThrottle(windowMs, maxAttempts) {
   const attemptsByKey = new Map();
 
@@ -280,11 +246,39 @@ function createJoinThrottle(windowMs, maxAttempts) {
   return { registerFailure, canAttempt, clear };
 }
 
+function createRoomSafetyAgent() {
+  function summarizeRoom(room) {
+    const cameraCount = room.cameras?.size || 0;
+    const viewerCount = room.viewers?.size || 0;
+    const memberCount = room.members?.size || 0;
+    const recordingActive = room.recording?.active === true;
+    const alerts = [];
+    if (cameraCount === 0) alerts.push('No active cameras');
+    if (recordingActive && cameraCount === 0) alerts.push('Recording is active without a camera');
+    return {
+      roomId: room.id,
+      roomNumber: room.roomNumber,
+      memberCount,
+      cameraCount,
+      viewerCount,
+      recordingActive,
+      status: alerts.length > 0 ? 'attention' : 'healthy',
+      alerts
+    };
+  }
+
+  function summarizeRooms(rooms) {
+    return [...rooms.values()].map((room) => summarizeRoom(room));
+  }
+
+  return { summarizeRoom, summarizeRooms };
+}
+
 function createAppAndServer(config = getSecurityConfig()) {
   const logger = createLogger();
   const app = express();
   const server = http.createServer(app);
-  const originChecker = createAllowedOriginChecker(config.allowedOrigins);
+  const originChecker = createAllowedOriginChecker(config.allowedOrigins, { allowAny: !config.isProduction });
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -295,8 +289,6 @@ function createAppAndServer(config = getSecurityConfig()) {
   app.use(express.urlencoded({ extended: false, limit: config.maxBodySize }));
 
   const httpLimiter = createHttpRateLimiter(config.joinRateLimitWindowMs, Math.max(10, config.joinRateLimitMax));
-
-  app.use(['/','/viewer'], httpLimiter);
   app.use(express.static(publicDir));
 
   app.get('/favicon.ico', (req, res) => {
@@ -305,8 +297,8 @@ function createAppAndServer(config = getSecurityConfig()) {
     });
   });
 
-  app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
-  app.get('/viewer', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+  app.get('/', httpLimiter, (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+  app.get('/viewer', httpLimiter, (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
   app.get('/healthz', (req, res) => res.json({ ok: true }));
 
   const io = new Server(server, {
@@ -328,14 +320,6 @@ function createAppAndServer(config = getSecurityConfig()) {
   const joinThrottleByIp = createJoinThrottle(config.joinRateLimitWindowMs, config.joinRateLimitMax);
   const joinThrottleByRoom = createJoinThrottle(config.joinRateLimitWindowMs, Math.max(3, Math.floor(config.joinRateLimitMax / 2)));
 
-  function createRoom(requestedRoomNumber = '') {
-    const roomId = `r_${generateToken(16)}`;
-    let roomNumber = normalizeRoomCode(requestedRoomNumber);
-    if (!isValidRoomNumber(roomNumber) || roomByNumber.has(roomNumber)) {
-      roomNumber = createRoomNumber(config.roomCodeLength);
-      while (roomByNumber.has(roomNumber)) {
-        roomNumber = createRoomNumber(config.roomCodeLength);
-      }
   const roomSafetyAgent = createRoomSafetyAgent();
 
   app.get('/api/agent/rooms', (req, res) => {
@@ -350,11 +334,14 @@ function createAppAndServer(config = getSecurityConfig()) {
     });
   });
 
-  function createRoom() {
+  function createRoom(requestedRoomNumber = '') {
     const roomId = `r_${generateToken(16)}`;
-    let roomNumber = createRoomNumber(config.roomCodeLength);
-    while (roomByNumber.has(roomNumber)) {
+    let roomNumber = normalizeRoomCode(requestedRoomNumber);
+    if (!isValidRoomNumber(roomNumber) || roomByNumber.has(roomNumber)) {
       roomNumber = createRoomNumber(config.roomCodeLength);
+      while (roomByNumber.has(roomNumber)) {
+        roomNumber = createRoomNumber(config.roomCodeLength);
+      }
     }
 
     const accessKey = `k_${generateToken(Math.ceil(config.accessKeyLength / 1.4))}`;
@@ -510,22 +497,6 @@ function createAppAndServer(config = getSecurityConfig()) {
 
       roomIdByNumber = roomByNumber.get(roomNumber);
       room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
-      if (!room || !isAccessKeyValid(room, accessKey)) {
-        joinThrottleByIp.registerFailure(ipKey);
-        joinThrottleByRoom.registerFailure(roomNumber || 'unknown');
-        logger.warn('socket.authorize_failed', { socketId: socket.id, ip: ipKey, roomNumber, accessKey: maskSecret(accessKey) });
-        callback?.({ ok: false, error: 'Invalid credentials' });
-        return;
-      }
-
-        const room = createRoom();
-        socket.data.authorizedRoomId = room.id;
-        callback?.({ ok: true, created: true, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
-        return;
-      }
-
-      const roomIdByNumber = roomByNumber.get(roomNumber);
-      const room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
       if (!room || !isAccessKeyValid(room, accessKey)) {
         joinThrottleByIp.registerFailure(ipKey);
         joinThrottleByRoom.registerFailure(roomNumber || 'unknown');
