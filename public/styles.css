@@ -12,6 +12,8 @@
   --accent-soft: rgba(167, 139, 250, 0.2);
   --success: #22c55e;
   --danger: #ef4444;
+  --onyx: #353839;
+  --onyx-light: #4a4f52;
 
   --space-1: 0.5rem;
   --space-2: 0.75rem;
@@ -74,7 +76,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
-  background: linear-gradient(180deg, rgba(18, 24, 33, 0.96), rgba(11, 16, 23, 0.95));
+  background: linear-gradient(180deg, #3a3d3e, var(--onyx));
   box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -145,6 +147,9 @@ h1 {
   grid-template-columns: 1.15fr minmax(300px, 0.9fr);
   gap: var(--space-5);
   align-items: start;
+  background: linear-gradient(180deg, #3b3e3f, var(--onyx));
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .hero-copy {
@@ -186,11 +191,11 @@ h1 {
 }
 
 .hero-action-card {
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-md);
-  background: linear-gradient(180deg, rgba(20, 28, 39, 0.94), rgba(12, 18, 26, 0.95));
+  background: linear-gradient(180deg, #52575b, var(--onyx-light));
   padding: var(--space-4);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 14px 28px rgba(4, 6, 10, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .form-grid {
