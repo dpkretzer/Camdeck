@@ -1,4 +1,7 @@
-const socket = io();
+const socket = io({
+  autoConnect: false,
+  auth: (cb) => cb(buildSocketAuth())
+});
 
 const homeScreen = document.getElementById("homeScreen");
 const roleScreen = document.getElementById("roleScreen");
@@ -377,6 +380,17 @@ function addTimelineEvent(message) {
   while (sessionTimeline.children.length > 30) {
     sessionTimeline.removeChild(sessionTimeline.lastChild);
   }
+}
+
+
+function buildSocketAuth() {
+  return {
+    roomId: currentRoomId || "",
+    roomCode: currentRoomCode || "",
+    accessKey: currentAccessKey || "",
+    role: role === "camera" ? "camera" : "viewer",
+    name: cameraName() || "guest"
+  };
 }
 
 function ensureSocketConnected() {
