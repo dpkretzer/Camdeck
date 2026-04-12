@@ -23,6 +23,10 @@ const cameraHudOnlyControls = [toggleMuteBtn, toggleCameraBtn, startRecordingBtn
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
 const roleInfoChip = document.getElementById("roleInfoChip");
+const hudMicBadge = document.getElementById("hudMicBadge");
+const hudCameraBadge = document.getElementById("hudCameraBadge");
+const hudRecordingBadge = document.getElementById("hudRecordingBadge");
+const hudOnlineBadge = document.getElementById("hudOnlineBadge");
 const emptyState = document.getElementById("emptyState");
 const sessionTimeline = document.getElementById("sessionTimeline");
 const toastRegion = document.getElementById("toastRegion");
@@ -30,6 +34,8 @@ const toastRegion = document.getElementById("toastRegion");
 const startCameraBtn = document.getElementById("startCamera");
 const startViewerBtn = document.getElementById("startViewer");
 const remoteVideos = document.getElementById("remoteVideos");
+const mainCameraRail = document.getElementById("mainCameraRail");
+const sideCameraRail = document.getElementById("sideCameraRail");
 
 let currentRoomId = "";
 let currentRoomNumber = "";
@@ -170,6 +176,30 @@ function setConnectionBadge(connected) {
   connectionBadge.textContent = connected ? "Server connection: online" : "Server connection: offline";
   connectionBadge.classList.toggle("online", connected);
   connectionBadge.classList.toggle("offline", !connected);
+  updateFeedHudBadges();
+}
+
+function setHudBadgeState(element, text, { active = false, alert = false } = {}) {
+  if (!element) return;
+  element.textContent = text;
+  element.classList.toggle("is-active", active);
+  element.classList.toggle("is-alert", alert);
+}
+
+function updateFeedHudBadges() {
+  const [audioTrack] = localStream?.getAudioTracks?.() || [];
+  const [videoTrack] = localStream?.getVideoTracks?.() || [];
+  const isRecording = mediaRecorder && mediaRecorder.state === "recording";
+
+  const micText = audioTrack ? `MIC ${audioTrack.enabled ? "ON" : "OFF"}` : "MIC --";
+  const cameraText = videoTrack ? `CAM ${videoTrack.enabled ? "ON" : "OFF"}` : "CAM --";
+  const recordingText = `REC ${isRecording ? "ON" : "OFF"}`;
+  const onlineText = `NET ${socket.connected ? "ON" : "OFF"}`;
+
+  setHudBadgeState(hudMicBadge, micText, { active: Boolean(audioTrack?.enabled), alert: Boolean(audioTrack && !audioTrack.enabled) });
+  setHudBadgeState(hudCameraBadge, cameraText, { active: Boolean(videoTrack?.enabled), alert: Boolean(videoTrack && !videoTrack.enabled) });
+  setHudBadgeState(hudRecordingBadge, recordingText, { active: Boolean(isRecording), alert: !isRecording });
+  setHudBadgeState(hudOnlineBadge, onlineText, { active: socket.connected, alert: !socket.connected });
 }
 
 function roomId() {
@@ -243,13 +273,36 @@ function loadSession() {
 }
 
 function applyLayout() {
-  const focusMode = layoutMode === "focus";
-  remoteVideos.classList.toggle("xl:grid-cols-1", focusMode);
-  remoteVideos.classList.toggle("2xl:grid-cols-1", focusMode);
-  toggleLayoutBtn.textContent = focusMode ? "Grid layout" : "Focus layout";
+  layoutMode = "focus";
+  remoteVideos.classList.add("focus-layout");
+  toggleLayoutBtn.textContent = "Focus layout";
+}
+
+function ensureFocusLayoutContainers() {
+  if (mainCameraRail && sideCameraRail) {
+    return { main: mainCameraRail, side: sideCameraRail };
+  }
+
+  let main = document.getElementById("mainCameraRail");
+  let side = document.getElementById("sideCameraRail");
+
+  if (!main || !side) {
+    remoteVideos.innerHTML = "";
+    main = document.createElement("div");
+    main.id = "mainCameraRail";
+    main.className = "main-camera-rail";
+    side = document.createElement("aside");
+    side.id = "sideCameraRail";
+    side.className = "side-camera-rail";
+    side.setAttribute("aria-label", "Additional camera feeds");
+    remoteVideos.append(main, side);
+  }
+
+  return { main, side };
 }
 
 function applyActiveCameraLayout() {
+  const { main, side } = ensureFocusLayoutContainers();
   const cards = Array.from(remoteVideos.querySelectorAll("[data-participant-tile]"));
   if (!cards.length) {
     activeCameraTileId = "";
@@ -266,12 +319,13 @@ function applyActiveCameraLayout() {
     const isActive = cardId === activeCameraTileId;
     card.classList.toggle("active-camera", isActive);
     card.classList.toggle("thumbnail-camera", !isActive);
-  });
 
-  const activeCard = document.getElementById(`card-${activeCameraTileId}`);
-  if (activeCard && remoteVideos.firstElementChild !== activeCard) {
-    remoteVideos.prepend(activeCard);
-  }
+    if (isActive) {
+      main.appendChild(card);
+    } else {
+      side.appendChild(card);
+    }
+  });
 }
 
 function setActiveCameraTile(id, { scrollIntoView = true } = {}) {
@@ -300,6 +354,7 @@ function applyLocalControlButtons() {
   if (!localStream) {
     toggleMuteBtn.textContent = "Mute";
     toggleCameraBtn.textContent = "Camera off";
+    updateFeedHudBadges();
     return;
   }
 
@@ -311,6 +366,7 @@ function applyLocalControlButtons() {
     toggleMuteBtn.textContent = audioTrack.enabled ? "Mute" : "Unmute";
   }
   toggleCameraBtn.textContent = videoTrack && videoTrack.enabled ? "Camera off" : "Camera on";
+  updateFeedHudBadges();
 }
 
 function applyRecordingButtons() {
@@ -320,6 +376,7 @@ function applyRecordingButtons() {
   stopRecordingBtn.disabled = !recorderSupported || !isRecording;
   startRecordingBtn.classList.toggle("opacity-50", !recorderSupported || isRecording);
   stopRecordingBtn.classList.toggle("opacity-50", !recorderSupported || !isRecording);
+  updateFeedHudBadges();
 }
 
 function applyLiveControlsVisibility() {
@@ -480,7 +537,7 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   card.tabIndex = 0;
 
   const mediaFrame = document.createElement("div");
-  mediaFrame.className = "relative aspect-video overflow-hidden rounded-xl bg-black/90";
+  mediaFrame.className = "mediaFrame relative overflow-hidden rounded-xl bg-black/90";
 
   const video = document.createElement("video");
   video.id = `video-${id}`;
@@ -503,7 +560,7 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   mediaFrame.append(video, loadingOverlay, placeholder);
 
   const footer = document.createElement("div");
-  footer.className = "mt-2 flex items-center justify-between gap-2";
+  footer.className = "tileFooter mt-1 flex items-center justify-between gap-2";
 
   const name = document.createElement("p");
   name.id = `name-${id}`;
@@ -646,7 +703,9 @@ function clearPeersAndVideos() {
   lastMotionLogAt.clear();
   localPeerTile = null;
   activeCameraTileId = "";
-  remoteVideos.innerHTML = "";
+  const { main, side } = ensureFocusLayoutContainers();
+  main.innerHTML = "";
+  side.innerHTML = "";
   sessionTimeline.innerHTML = "";
   updateEmptyState();
 }
@@ -1560,8 +1619,9 @@ startCameraBtn.addEventListener("click", startCamera);
 startViewerBtn.addEventListener("click", startViewer);
 
 toggleLayoutBtn.addEventListener("click", () => {
-  layoutMode = layoutMode === "grid" ? "focus" : "grid";
+  layoutMode = "focus";
   applyLayout();
+  setStatus("Focus layout enabled.");
 });
 
 toggleMotionFollowBtn.addEventListener("click", () => {
