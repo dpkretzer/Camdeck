@@ -18,6 +18,7 @@ const toggleMuteBtn = document.getElementById("toggleMute");
 const toggleCameraBtn = document.getElementById("toggleCamera");
 const startRecordingBtn = document.getElementById("startRecording");
 const stopRecordingBtn = document.getElementById("stopRecording");
+const cameraHudOnlyControls = [toggleMuteBtn, toggleCameraBtn, startRecordingBtn, stopRecordingBtn, toggleMotionFollowBtn, toggleLayoutBtn];
 
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
@@ -319,6 +320,15 @@ function applyRecordingButtons() {
   stopRecordingBtn.disabled = !recorderSupported || !isRecording;
   startRecordingBtn.classList.toggle("opacity-50", !recorderSupported || isRecording);
   stopRecordingBtn.classList.toggle("opacity-50", !recorderSupported || !isRecording);
+}
+
+function applyLiveControlsVisibility() {
+  const hideCameraHudControls = role === "camera";
+  cameraHudOnlyControls.forEach((button) => {
+    if (!button) return;
+    button.classList.toggle("hidden", hideCameraHudControls);
+    button.setAttribute("aria-hidden", hideCameraHudControls ? "true" : "false");
+  });
 }
 
 function updateEmptyState() {
@@ -1061,6 +1071,7 @@ function leaveRoom({ disconnectSocket = false, resetRoomState = false, clearStor
   stopLocalStream();
   localParticipantId = "";
   role = null;
+  applyLiveControlsVisibility();
   updateLiveInfoChips();
   syncCameraSocketLifecycle();
 
@@ -1139,6 +1150,7 @@ function localMediaConstraints({ includeAudio = false } = {}) {
 
 async function startCamera() {
   role = "camera";
+  applyLiveControlsVisibility();
   updateLiveInfoChips();
   syncCameraSocketLifecycle();
   console.log("[WebRTC] startCamera() called", { roomId: currentRoomId });
@@ -1192,6 +1204,7 @@ async function startCamera() {
     showToast(message, "error", 3200);
     alert(message);
     role = null;
+    applyLiveControlsVisibility();
     updateLiveInfoChips();
     syncCameraSocketLifecycle();
     stopLocalStream();
@@ -1203,6 +1216,7 @@ async function startCamera() {
 
 async function startViewer() {
   role = "viewer";
+  applyLiveControlsVisibility();
   updateLiveInfoChips();
   syncCameraSocketLifecycle();
   console.log("[WebRTC] startViewer() called", { roomId: currentRoomId });
@@ -1235,6 +1249,7 @@ async function startViewer() {
     setStatus(err?.message || "Failed to connect. Please try again.");
     showToast(err?.message || "Viewer connection failed.", "error");
     role = null;
+    applyLiveControlsVisibility();
     updateLiveInfoChips();
     syncCameraSocketLifecycle();
     showScreen(roleScreen);
@@ -1607,6 +1622,7 @@ applyLayout();
 applyMotionFollowButton();
 applyLocalControlButtons();
 applyRecordingButtons();
+applyLiveControlsVisibility();
 updateLiveInfoChips();
 setConnectionBadge(socket.connected);
 refreshCameraDevices();
