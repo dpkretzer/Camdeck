@@ -607,12 +607,15 @@ button.danger {
 }
 
 #remoteVideos article.active-camera {
-  min-height: 0;
+  min-height: 0 !important;
+  height: auto !important;
+  align-self: start;
 }
 
 #remoteVideos article.active-camera .mediaFrame {
-  min-height: clamp(220px, 46vh, 480px);
-  max-height: min(66vh, 520px);
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: 16 / 9;
 }
 
 #remoteVideos article.active-camera video {
