@@ -554,9 +554,6 @@ function buildParticipantTile(id, displayName, isLocal = false) {
 
   mediaFrame.append(video, loadingOverlay, placeholder);
 
-  const footer = document.createElement("div");
-  footer.className = "tileFooter mt-1 flex items-center justify-between gap-2";
-
   const name = document.createElement("p");
   name.id = `name-${id}`;
   name.className = "truncate text-sm font-medium text-slate-100";
@@ -569,10 +566,6 @@ function buildParticipantTile(id, displayName, isLocal = false) {
     createStatusBadge("Mic on", "bg-emerald-500/20 text-emerald-200"),
     createStatusBadge("Live", "bg-cyan-500/20 text-cyan-200")
   );
-
-  const tileControls = document.createElement("div");
-  tileControls.className = "flex items-center gap-2";
-  tileControls.append(badges);
 
   const videoToggleBtn = document.createElement("button");
   videoToggleBtn.id = `video-toggle-${id}`;
@@ -592,10 +585,8 @@ function buildParticipantTile(id, displayName, isLocal = false) {
       requestViewerCameraToggle(id);
     }
   });
-  tileControls.append(videoToggleBtn);
-
-  footer.append(name, tileControls);
-  card.append(mediaFrame, footer);
+  mediaFrame.append(name, badges, videoToggleBtn);
+  card.append(mediaFrame);
 
   const handleCanPlay = () => {
     loadingOverlay.classList.add("hidden");
