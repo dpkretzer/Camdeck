@@ -105,9 +105,13 @@ function createHttpRateLimiter(windowMs, max) {
   };
 }
 
-function createAllowedOriginChecker(allowedOrigins) {
+function createAllowedOriginChecker(allowedOrigins, { allowAny = false } = {}) {
   const allowed = new Set(allowedOrigins);
   return (origin, callback) => {
+    if (allowAny) {
+      callback(null, true);
+      return;
+    }
     if (!origin || allowed.has(origin)) {
       callback(null, true);
       return;
@@ -274,7 +278,7 @@ function createAppAndServer(config = getSecurityConfig()) {
   const logger = createLogger();
   const app = express();
   const server = http.createServer(app);
-  const originChecker = createAllowedOriginChecker(config.allowedOrigins);
+  const originChecker = createAllowedOriginChecker(config.allowedOrigins, { allowAny: !config.isProduction });
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
