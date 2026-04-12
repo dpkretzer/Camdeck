@@ -1,4 +1,11 @@
-const socket = io();
+const socket = io(window.location.origin, {
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  timeout: 20000,
+  autoConnect: false,
+  auth: (cb) => cb(buildSocketAuth())
+});
 
 const homeScreen = document.getElementById("homeScreen");
 const roleScreen = document.getElementById("roleScreen");
@@ -377,6 +384,17 @@ function addTimelineEvent(message) {
   while (sessionTimeline.children.length > 30) {
     sessionTimeline.removeChild(sessionTimeline.lastChild);
   }
+}
+
+
+function buildSocketAuth() {
+  return {
+    roomId: currentRoomId || "",
+    roomCode: currentRoomCode || "",
+    accessKey: currentAccessKey || "",
+    role: role === "camera" ? "camera" : "viewer",
+    name: cameraName() || "guest"
+  };
 }
 
 function ensureSocketConnected() {
@@ -1538,6 +1556,7 @@ async function restoreSessionAfterReconnect() {
 }
 
 socket.on("connect", () => {
+  console.log("Socket connected:", socket.id);
   setConnectionBadge(true);
   if (role && currentRoomCode) {
     restoreSessionAfterReconnect();
@@ -1553,8 +1572,13 @@ socket.on("disconnect", () => {
 });
 
 socket.on("connect_error", (error) => {
+  console.error("Socket connect_error:", error?.message, error);
   setConnectionBadge(false);
   setStatus(`Server connection failed: ${error?.message || "Unknown error"}`);
+});
+
+socket.on("error", (err) => {
+  console.error("Socket error:", err);
 });
 
 connectRoomBtn.addEventListener("click", connectRoom);

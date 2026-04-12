@@ -4,9 +4,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --check server.js && node --check public/app.js"
+    "test": "node --test && node --check server.js && node --check public/app.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.18.2",
     "socket.io": "^4.8.1"
   }
