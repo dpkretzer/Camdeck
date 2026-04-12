@@ -285,8 +285,6 @@ function createAppAndServer(config = getSecurityConfig()) {
   app.use(express.urlencoded({ extended: false, limit: config.maxBodySize }));
 
   const httpLimiter = createHttpRateLimiter(config.joinRateLimitWindowMs, Math.max(10, config.joinRateLimitMax));
-
-  app.use(['/','/viewer'], httpLimiter);
   app.use(express.static(publicDir));
 
   app.get('/favicon.ico', (req, res) => {
@@ -295,8 +293,8 @@ function createAppAndServer(config = getSecurityConfig()) {
     });
   });
 
-  app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
-  app.get('/viewer', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+  app.get('/', httpLimiter, (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+  app.get('/viewer', httpLimiter, (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
   app.get('/healthz', (req, res) => res.json({ ok: true }));
 
   const io = new Server(server, {
