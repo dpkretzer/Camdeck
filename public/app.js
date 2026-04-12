@@ -1,3 +1,8 @@
+const socket = io(window.location.origin, {
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  timeout: 20000,
 const socket = io({
   autoConnect: false,
   auth: (cb) => cb(buildSocketAuth())
@@ -1552,6 +1557,7 @@ async function restoreSessionAfterReconnect() {
 }
 
 socket.on("connect", () => {
+  console.log("Socket connected:", socket.id);
   setConnectionBadge(true);
   if (role && currentRoomCode) {
     restoreSessionAfterReconnect();
@@ -1567,8 +1573,13 @@ socket.on("disconnect", () => {
 });
 
 socket.on("connect_error", (error) => {
+  console.error("Socket connect_error:", error?.message, error);
   setConnectionBadge(false);
   setStatus(`Server connection failed: ${error?.message || "Unknown error"}`);
+});
+
+socket.on("error", (err) => {
+  console.error("Socket error:", err);
 });
 
 connectRoomBtn.addEventListener("click", connectRoom);

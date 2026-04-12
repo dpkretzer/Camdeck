@@ -158,6 +158,26 @@ function normalizeRoomCode(value) {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
 }
 
+function isValidRoomNumber(value) {
+  return /^[A-Z0-9_-]{4,24}$/.test(value);
+}
+
+function normalizeAccessKey(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeRole(value) {
+  const role = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return role === ROLE.CAMERA || role === ROLE.VIEWER ? role : '';
+}
+
+function parseRoomCode(rawValue) {
+  const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+  if (!value) return { roomNumber: '', accessKey: '' };
+  const [roomPart, accessPart] = value.split(':');
+  return {
+    roomNumber: (roomPart || '').trim().toUpperCase(),
+    accessKey: normalizeAccessKey(accessPart || '')
 function normalizeAccessKey(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -175,6 +195,27 @@ function parseRoomCode(rawValue) {
     roomNumber: (roomPart || '').trim().toUpperCase(),
     accessKey: normalizeAccessKey(accessPart || '')
   };
+}
+
+function validateHandshakeAuth(rawAuth) {
+  if (!rawAuth || typeof rawAuth !== 'object') {
+    return { ok: false, error: 'Invalid credentials' };
+  }
+
+  const normalized = {
+    roomId: normalizeRoomId(rawAuth.roomId),
+    roomCode: typeof rawAuth.roomCode === 'string' ? rawAuth.roomCode.trim() : '',
+    accessKey: normalizeAccessKey(rawAuth.accessKey),
+    role: normalizeRole(rawAuth.role),
+    name: sanitizeName(rawAuth.name || '', 'Participant')
+  };
+
+  if (!normalized.role) return { ok: false, error: 'Invalid credentials' };
+  if (normalized.roomId.length > 128 || normalized.roomCode.length > 256 || normalized.accessKey.length > 256) {
+    return { ok: false, error: 'Invalid credentials' };
+  }
+
+  return { ok: true, data: normalized };
 }
 
 function validateHandshakeAuth(rawAuth) {
@@ -239,38 +280,6 @@ function createJoinThrottle(windowMs, maxAttempts) {
   return { registerFailure, canAttempt, clear };
 }
 
-function createRoomSafetyAgent() {
-  function summarizeRoom(room) {
-    if (!room || typeof room !== 'object') return null;
-    const cameraCount = room.cameras?.size || 0;
-    const viewerCount = room.viewers?.size || 0;
-    const memberCount = room.members?.size || 0;
-    const recordingActive = room.recording?.active === true;
-
-    const alerts = [];
-    if (cameraCount === 0 && viewerCount > 0) alerts.push('Viewers are connected, but no camera is currently online.');
-    if (viewerCount > 10) alerts.push('High viewer count detected. Verify all viewers are trusted.');
-    if (recordingActive && cameraCount === 0) alerts.push('Recording is marked active without an online camera.');
-
-    return {
-      roomId: room.id,
-      roomNumber: room.roomNumber,
-      memberCount,
-      cameraCount,
-      viewerCount,
-      recordingActive,
-      status: alerts.length > 0 ? 'attention' : 'healthy',
-      alerts
-    };
-  }
-
-  function summarizeRooms(rooms) {
-    return [...rooms.values()].map((room) => summarizeRoom(room)).filter(Boolean);
-  }
-
-  return { summarizeRoom, summarizeRooms };
-}
-
 function createAppAndServer(config = getSecurityConfig()) {
   const logger = createLogger();
   const app = express();
@@ -308,12 +317,25 @@ function createAppAndServer(config = getSecurityConfig()) {
     }
   });
 
+  io.engine.on('connection_error', (err) => {
+    console.error('Engine connection error:', err.message, err.code);
+  });
+
   const rooms = new Map();
   const roomByAccessKey = new Map();
   const roomByNumber = new Map();
   const participantBySocketId = new Map();
   const joinThrottleByIp = createJoinThrottle(config.joinRateLimitWindowMs, config.joinRateLimitMax);
   const joinThrottleByRoom = createJoinThrottle(config.joinRateLimitWindowMs, Math.max(3, Math.floor(config.joinRateLimitMax / 2)));
+
+  function createRoom(requestedRoomNumber = '') {
+    const roomId = `r_${generateToken(16)}`;
+    let roomNumber = normalizeRoomCode(requestedRoomNumber);
+    if (!isValidRoomNumber(roomNumber) || roomByNumber.has(roomNumber)) {
+      roomNumber = createRoomNumber(config.roomCodeLength);
+      while (roomByNumber.has(roomNumber)) {
+        roomNumber = createRoomNumber(config.roomCodeLength);
+      }
   const roomSafetyAgent = createRoomSafetyAgent();
 
   app.get('/api/agent/rooms', (req, res) => {
@@ -461,6 +483,41 @@ function createAppAndServer(config = getSecurityConfig()) {
       }
 
       if (!roomNumber && !accessKey) {
+        callback?.({ ok: false, error: 'Please enter a random room code.' });
+        return;
+      }
+
+      if (roomNumber && !isValidRoomNumber(roomNumber)) {
+        callback?.({ ok: false, error: 'Room code must be 4-24 chars (A-Z, 0-9, _, -).' });
+        return;
+      }
+
+      let roomIdByNumber = roomByNumber.get(roomNumber);
+      let room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
+
+      if (roomNumber && !accessKey && !room) {
+        room = createRoom(roomNumber);
+        socket.data.authorizedRoomId = room.id;
+        callback?.({ ok: true, created: true, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
+        return;
+      }
+
+      if (roomNumber && !accessKey && room) {
+        socket.data.authorizedRoomId = room.id;
+        callback?.({ ok: true, created: false, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
+        return;
+      }
+
+      roomIdByNumber = roomByNumber.get(roomNumber);
+      room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
+      if (!room || !isAccessKeyValid(room, accessKey)) {
+        joinThrottleByIp.registerFailure(ipKey);
+        joinThrottleByRoom.registerFailure(roomNumber || 'unknown');
+        logger.warn('socket.authorize_failed', { socketId: socket.id, ip: ipKey, roomNumber, accessKey: maskSecret(accessKey) });
+        callback?.({ ok: false, error: 'Invalid credentials' });
+        return;
+      }
+
         const room = createRoom();
         socket.data.authorizedRoomId = room.id;
         callback?.({ ok: true, created: true, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
@@ -483,78 +540,90 @@ function createAppAndServer(config = getSecurityConfig()) {
       callback?.({ ok: true, created: false, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
     });
 
-    socket.on('join-room', ({ role, name, label, videoEnabled } = {}, callback) => {
-      const normalizedRole = normalizeRole(role || socket.data.handshakeAuth?.role);
-      const authRoomId = socket.data.authorizedRoomId;
-      const ipKey = socket.handshake.address || 'unknown';
+    socket.on('join-room', (payload, callback) => {
+      try {
+        console.log('join-room payload:', payload);
+        if (!payload || typeof payload !== 'object') {
+          callback?.({ ok: false, error: 'Invalid payload' });
+          return;
+        }
 
-      const ipCheck = joinThrottleByIp.canAttempt(ipKey);
-      if (!ipCheck.allowed) {
-        callback?.({ ok: false, error: 'Invalid credentials' });
-        return;
-      }
+        const { role, name, label, videoEnabled } = payload;
+        const normalizedRole = normalizeRole(role || socket.data.handshakeAuth?.role);
+        const authRoomId = socket.data.authorizedRoomId;
+        const ipKey = socket.handshake.address || 'unknown';
 
-      const room = rooms.get(authRoomId);
-      if (!room) {
-        joinThrottleByIp.registerFailure(ipKey);
-        callback?.({ ok: false, error: 'Invalid credentials' });
-        return;
-      }
+        const ipCheck = joinThrottleByIp.canAttempt(ipKey);
+        if (!ipCheck.allowed) {
+          callback?.({ ok: false, error: 'Invalid credentials' });
+          return;
+        }
 
-      const roomCheck = joinThrottleByRoom.canAttempt(room.roomNumber);
-      if (!roomCheck.allowed) {
-        callback?.({ ok: false, error: 'Invalid credentials' });
-        return;
-      }
+        const room = rooms.get(authRoomId);
+        if (!room) {
+          joinThrottleByIp.registerFailure(ipKey);
+          callback?.({ ok: false, error: 'Invalid credentials' });
+          return;
+        }
 
-      if (!normalizedRole) {
-        joinThrottleByIp.registerFailure(ipKey);
-        callback?.({ ok: false, error: 'Invalid credentials' });
-        return;
-      }
+        const roomCheck = joinThrottleByRoom.canAttempt(room.roomNumber);
+        if (!roomCheck.allowed) {
+          callback?.({ ok: false, error: 'Invalid credentials' });
+          return;
+        }
 
-      removeSocketFromRoom(socket, 'rejoin');
+        if (!normalizedRole) {
+          joinThrottleByIp.registerFailure(ipKey);
+          callback?.({ ok: false, error: 'Invalid credentials' });
+          return;
+        }
 
-      const participantId = `p_${generateToken(12)}`;
-      const member = {
-        socketId: socket.id,
-        participantId,
-        role: normalizedRole,
-        roomId: room.id,
-        label: sanitizeName(label || name, normalizedRole === ROLE.CAMERA ? 'Camera feed' : 'Viewer'),
-        videoEnabled: normalizedRole === ROLE.CAMERA ? videoEnabled !== false : undefined
-      };
+        removeSocketFromRoom(socket, 'rejoin');
 
-      participantBySocketId.set(socket.id, member);
-      room.members.add(socket.id);
-      if (normalizedRole === ROLE.CAMERA) room.cameras.add(participantId);
-      if (normalizedRole === ROLE.VIEWER) room.viewers.add(participantId);
-      socket.join(room.id);
-      joinThrottleByIp.clear(ipKey);
+        const participantId = `p_${generateToken(12)}`;
+        const member = {
+          socketId: socket.id,
+          participantId,
+          role: normalizedRole,
+          roomId: room.id,
+          label: sanitizeName(label || name, normalizedRole === ROLE.CAMERA ? 'Camera feed' : 'Viewer'),
+          videoEnabled: normalizedRole === ROLE.CAMERA ? videoEnabled !== false : undefined
+        };
 
-      socket.emit('session-authorized', {
-        roomNumber: room.roomNumber,
-        roomId: room.id,
-        participantId,
-        role: normalizedRole,
-        accessKey: room.accessKey,
-        roomCode: `${room.roomNumber}:${room.accessKey}`
-      });
+        participantBySocketId.set(socket.id, member);
+        room.members.add(socket.id);
+        if (normalizedRole === ROLE.CAMERA) room.cameras.add(participantId);
+        if (normalizedRole === ROLE.VIEWER) room.viewers.add(participantId);
+        socket.join(room.id);
+        joinThrottleByIp.clear(ipKey);
 
-      if (normalizedRole === ROLE.VIEWER) {
-        socket.emit('existing-cameras', roomCameraList(room));
-      }
-
-      if (normalizedRole === ROLE.CAMERA) {
-        emitToViewers(room, 'camera-joined', {
-          id: participantId,
-          name: member.label,
-          videoEnabled: member.videoEnabled !== false
+        socket.emit('session-authorized', {
+          roomNumber: room.roomNumber,
+          roomId: room.id,
+          participantId,
+          role: normalizedRole,
+          accessKey: room.accessKey,
+          roomCode: `${room.roomNumber}:${room.accessKey}`
         });
-      }
 
-      logger.info('socket.join_success', { socketId: socket.id, roomId: room.id, roomNumber: room.roomNumber, role: normalizedRole });
-      callback?.({ ok: true, room: { id: room.id, roomNumber: room.roomNumber } });
+        if (normalizedRole === ROLE.VIEWER) {
+          socket.emit('existing-cameras', roomCameraList(room));
+        }
+
+        if (normalizedRole === ROLE.CAMERA) {
+          emitToViewers(room, 'camera-joined', {
+            id: participantId,
+            name: member.label,
+            videoEnabled: member.videoEnabled !== false
+          });
+        }
+
+        logger.info('socket.join_success', { socketId: socket.id, roomId: room.id, roomNumber: room.roomNumber, role: normalizedRole });
+        callback?.({ ok: true, room: { id: room.id, roomNumber: room.roomNumber } });
+      } catch (err) {
+        console.error('join-room error:', err);
+        callback?.({ ok: false, error: 'Server error' });
+      }
     });
 
     socket.on('signal', ({ target, payload, data } = {}) => {
@@ -650,6 +719,7 @@ if (require.main === module) {
   const { server } = createAppAndServer(config);
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
+    console.log('Server running on port', port);
     console.log(`Server running on http://localhost:${port}`);
   });
 }
