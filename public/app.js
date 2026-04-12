@@ -1,9 +1,7 @@
 const socket = io(window.location.origin, {
-  transports: ["websocket", "polling"],
   reconnection: true,
   reconnectionAttempts: 5,
   timeout: 20000,
-const socket = io({
   autoConnect: false,
   auth: (cb) => cb(buildSocketAuth())
 });
@@ -402,9 +400,10 @@ function ensureSocketConnected() {
   if (socket.connected) return Promise.resolve();
 
   return new Promise((resolve, reject) => {
+    let lastError = null;
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error("Could not connect to server. Is KoziKamera running?"));
+      reject(lastError || new Error("Could not connect to server. Is KoziKamera running?"));
     }, 5000);
 
     const onConnect = () => {
@@ -413,8 +412,11 @@ function ensureSocketConnected() {
     };
 
     const onError = (err) => {
-      cleanup();
-      reject(err || new Error("Connection error"));
+      lastError = err || new Error("Connection error");
+      if (lastError?.message === "Invalid credentials") {
+        cleanup();
+        reject(lastError);
+      }
     };
 
     const cleanup = () => {
