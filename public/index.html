@@ -75,17 +75,6 @@
           </div>
         </section>
 
-        <section class="live-section live-grid-section">
-          <div class="feed-card-overlay" aria-live="polite">
-            <span id="hudMicBadge" class="hud-badge">MIC --</span>
-            <span id="hudCameraBadge" class="hud-badge">CAM --</span>
-            <span id="hudRecordingBadge" class="hud-badge">REC --</span>
-            <span id="hudOnlineBadge" class="hud-badge">NET --</span>
-          </div>
-          <p id="emptyState" class="empty-state">No cameras connected — deploy a camera to start monitoring.</p>
-          <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
-        </section>
-
         <section class="live-section live-status-controls">
           <div class="control-row dense viewer-controls-grid">
               <button id="toggleMute" class="secondary">Mute</button>
@@ -99,6 +88,17 @@
               <button id="retryPlayback" class="secondary retry-btn">Retry Video</button>
               <button id="disconnectRoom" class="danger">Disconnect</button>
             </div>
+        </section>
+
+        <section class="live-section live-grid-section">
+          <div class="feed-card-overlay" aria-live="polite">
+            <span id="hudMicBadge" class="hud-badge">MIC --</span>
+            <span id="hudCameraBadge" class="hud-badge">CAM --</span>
+            <span id="hudRecordingBadge" class="hud-badge">REC --</span>
+            <span id="hudOnlineBadge" class="hud-badge">NET --</span>
+          </div>
+          <p id="emptyState" class="empty-state">No cameras connected — deploy a camera to start monitoring.</p>
+          <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
         </section>
 
         <section class="live-section slim-status-row">
