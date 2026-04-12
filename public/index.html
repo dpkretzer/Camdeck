@@ -66,40 +66,45 @@
 
       <section id="liveScreen" class="screen glass-panel live-panel">
         <section class="live-section live-header">
-          <div class="live-info-bar">
-            <div class="live-info-group">
-              <span class="live-label">Role</span>
-              <span id="roleInfoChip" class="info-chip">None</span>
-            </div>
-            <div class="live-info-group">
-              <span class="live-label">Connection</span>
-              <span id="connectionBadge" class="connection-badge">Connecting…</span>
-            </div>
+          <div class="viewer-header-title-row">
+            <h2 class="panel-title viewer-mobile-title">Live Viewer</h2>
           </div>
-
-          <div class="live-top-row">
-            <div class="control-row dense">
-              <button id="toggleMute" class="secondary">Mute</button>
-              <button id="toggleCamera" class="secondary">Camera off</button>
-              <button id="startRecording" class="record">Start Recording</button>
-              <button id="stopRecording" class="stop">Stop Recording</button>
-              <button id="toggleMotionFollow" class="secondary">Motion follow: Off</button>
-              <button id="toggleLayout" class="secondary">Focus layout</button>
-              <button id="disconnectRoom" class="danger">Disconnect</button>
-            </div>
+          <div class="live-info-bar compact">
+            <span id="roleInfoChip" class="info-chip">None</span>
+            <span id="connectionBadge" class="connection-badge">Connecting…</span>
           </div>
-        </section>
-
-        <section class="live-section live-status-controls">
-          <div class="status-row">
-            <div id="statusMessage" class="status-text" role="status" aria-live="polite"></div>
-          </div>
-          <button id="retryPlayback" class="secondary retry-btn">Tap if video doesn't play</button>
         </section>
 
         <section class="live-section live-grid-section">
+          <div class="feed-card-overlay" aria-live="polite">
+            <span id="hudMicBadge" class="hud-badge">MIC --</span>
+            <span id="hudCameraBadge" class="hud-badge">CAM --</span>
+            <span id="hudRecordingBadge" class="hud-badge">REC --</span>
+            <span id="hudOnlineBadge" class="hud-badge">NET --</span>
+          </div>
           <p id="emptyState" class="empty-state">No cameras connected — deploy a camera to start monitoring.</p>
           <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
+        </section>
+
+        <section class="live-section live-status-controls">
+          <div class="control-row dense viewer-controls-grid">
+              <button id="toggleMute" class="secondary">Mute</button>
+              <button id="toggleCamera" class="secondary">Camera off</button>
+              <div class="record-toggle-group">
+                <button id="startRecording" class="record">Start Recording</button>
+                <button id="stopRecording" class="stop">Stop Recording</button>
+              </div>
+              <button id="toggleMotionFollow" class="secondary">Motion follow: Off</button>
+              <button id="toggleLayout" class="secondary">Focus layout</button>
+              <button id="retryPlayback" class="secondary retry-btn">Retry Video</button>
+              <button id="disconnectRoom" class="danger">Disconnect</button>
+            </div>
+        </section>
+
+        <section class="live-section slim-status-row">
+          <div class="status-row">
+            <div id="statusMessage" class="status-text" role="status" aria-live="polite"></div>
+          </div>
         </section>
 
         <section id="timelinePanel" class="timeline-panel live-section" aria-live="polite">

@@ -23,6 +23,10 @@ const cameraHudOnlyControls = [toggleMuteBtn, toggleCameraBtn, startRecordingBtn
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
 const roleInfoChip = document.getElementById("roleInfoChip");
+const hudMicBadge = document.getElementById("hudMicBadge");
+const hudCameraBadge = document.getElementById("hudCameraBadge");
+const hudRecordingBadge = document.getElementById("hudRecordingBadge");
+const hudOnlineBadge = document.getElementById("hudOnlineBadge");
 const emptyState = document.getElementById("emptyState");
 const sessionTimeline = document.getElementById("sessionTimeline");
 const toastRegion = document.getElementById("toastRegion");
@@ -170,6 +174,30 @@ function setConnectionBadge(connected) {
   connectionBadge.textContent = connected ? "Server connection: online" : "Server connection: offline";
   connectionBadge.classList.toggle("online", connected);
   connectionBadge.classList.toggle("offline", !connected);
+  updateFeedHudBadges();
+}
+
+function setHudBadgeState(element, text, { active = false, alert = false } = {}) {
+  if (!element) return;
+  element.textContent = text;
+  element.classList.toggle("is-active", active);
+  element.classList.toggle("is-alert", alert);
+}
+
+function updateFeedHudBadges() {
+  const [audioTrack] = localStream?.getAudioTracks?.() || [];
+  const [videoTrack] = localStream?.getVideoTracks?.() || [];
+  const isRecording = mediaRecorder && mediaRecorder.state === "recording";
+
+  const micText = audioTrack ? `MIC ${audioTrack.enabled ? "ON" : "OFF"}` : "MIC --";
+  const cameraText = videoTrack ? `CAM ${videoTrack.enabled ? "ON" : "OFF"}` : "CAM --";
+  const recordingText = `REC ${isRecording ? "ON" : "OFF"}`;
+  const onlineText = `NET ${socket.connected ? "ON" : "OFF"}`;
+
+  setHudBadgeState(hudMicBadge, micText, { active: Boolean(audioTrack?.enabled), alert: Boolean(audioTrack && !audioTrack.enabled) });
+  setHudBadgeState(hudCameraBadge, cameraText, { active: Boolean(videoTrack?.enabled), alert: Boolean(videoTrack && !videoTrack.enabled) });
+  setHudBadgeState(hudRecordingBadge, recordingText, { active: Boolean(isRecording), alert: !isRecording });
+  setHudBadgeState(hudOnlineBadge, onlineText, { active: socket.connected, alert: !socket.connected });
 }
 
 function roomId() {
@@ -300,6 +328,7 @@ function applyLocalControlButtons() {
   if (!localStream) {
     toggleMuteBtn.textContent = "Mute";
     toggleCameraBtn.textContent = "Camera off";
+    updateFeedHudBadges();
     return;
   }
 
@@ -311,6 +340,7 @@ function applyLocalControlButtons() {
     toggleMuteBtn.textContent = audioTrack.enabled ? "Mute" : "Unmute";
   }
   toggleCameraBtn.textContent = videoTrack && videoTrack.enabled ? "Camera off" : "Camera on";
+  updateFeedHudBadges();
 }
 
 function applyRecordingButtons() {
@@ -320,6 +350,7 @@ function applyRecordingButtons() {
   stopRecordingBtn.disabled = !recorderSupported || !isRecording;
   startRecordingBtn.classList.toggle("opacity-50", !recorderSupported || isRecording);
   stopRecordingBtn.classList.toggle("opacity-50", !recorderSupported || !isRecording);
+  updateFeedHudBadges();
 }
 
 function applyLiveControlsVisibility() {
@@ -480,7 +511,7 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   card.tabIndex = 0;
 
   const mediaFrame = document.createElement("div");
-  mediaFrame.className = "relative aspect-video overflow-hidden rounded-xl bg-black/90";
+  mediaFrame.className = "mediaFrame relative overflow-hidden rounded-xl bg-black/90";
 
   const video = document.createElement("video");
   video.id = `video-${id}`;
@@ -503,7 +534,7 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   mediaFrame.append(video, loadingOverlay, placeholder);
 
   const footer = document.createElement("div");
-  footer.className = "mt-2 flex items-center justify-between gap-2";
+  footer.className = "tileFooter mt-1 flex items-center justify-between gap-2";
 
   const name = document.createElement("p");
   name.id = `name-${id}`;
