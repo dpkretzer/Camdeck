@@ -158,6 +158,10 @@ function normalizeRoomCode(value) {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
 }
 
+function isValidRoomNumber(value) {
+  return /^[A-Z0-9_-]{4,24}$/.test(value);
+}
+
 function normalizeAccessKey(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -286,11 +290,14 @@ function createAppAndServer(config = getSecurityConfig()) {
   const joinThrottleByIp = createJoinThrottle(config.joinRateLimitWindowMs, config.joinRateLimitMax);
   const joinThrottleByRoom = createJoinThrottle(config.joinRateLimitWindowMs, Math.max(3, Math.floor(config.joinRateLimitMax / 2)));
 
-  function createRoom() {
+  function createRoom(requestedRoomNumber = '') {
     const roomId = `r_${generateToken(16)}`;
-    let roomNumber = createRoomNumber(config.roomCodeLength);
-    while (roomByNumber.has(roomNumber)) {
+    let roomNumber = normalizeRoomCode(requestedRoomNumber);
+    if (!isValidRoomNumber(roomNumber) || roomByNumber.has(roomNumber)) {
       roomNumber = createRoomNumber(config.roomCodeLength);
+      while (roomByNumber.has(roomNumber)) {
+        roomNumber = createRoomNumber(config.roomCodeLength);
+      }
     }
 
     const accessKey = `k_${generateToken(Math.ceil(config.accessKeyLength / 1.4))}`;
@@ -419,14 +426,33 @@ function createAppAndServer(config = getSecurityConfig()) {
       }
 
       if (!roomNumber && !accessKey) {
-        const room = createRoom();
+        callback?.({ ok: false, error: 'Please enter a random room code.' });
+        return;
+      }
+
+      if (roomNumber && !isValidRoomNumber(roomNumber)) {
+        callback?.({ ok: false, error: 'Room code must be 4-24 chars (A-Z, 0-9, _, -).' });
+        return;
+      }
+
+      let roomIdByNumber = roomByNumber.get(roomNumber);
+      let room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
+
+      if (roomNumber && !accessKey && !room) {
+        room = createRoom(roomNumber);
         socket.data.authorizedRoomId = room.id;
         callback?.({ ok: true, created: true, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
         return;
       }
 
-      const roomIdByNumber = roomByNumber.get(roomNumber);
-      const room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
+      if (roomNumber && !accessKey && room) {
+        socket.data.authorizedRoomId = room.id;
+        callback?.({ ok: true, created: false, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
+        return;
+      }
+
+      roomIdByNumber = roomByNumber.get(roomNumber);
+      room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
       if (!room || !isAccessKeyValid(room, accessKey)) {
         joinThrottleByIp.registerFailure(ipKey);
         joinThrottleByRoom.registerFailure(roomNumber || 'unknown');
