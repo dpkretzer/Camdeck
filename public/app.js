@@ -24,7 +24,15 @@ const toggleMuteBtn = document.getElementById("toggleMute");
 const toggleCameraBtn = document.getElementById("toggleCamera");
 const startRecordingBtn = document.getElementById("startRecording");
 const stopRecordingBtn = document.getElementById("stopRecording");
-const cameraHudOnlyControls = [toggleMuteBtn, toggleCameraBtn, startRecordingBtn, stopRecordingBtn, toggleMotionFollowBtn, toggleLayoutBtn];
+const controlsHiddenForCameraRole = [
+  toggleMuteBtn,
+  toggleCameraBtn,
+  startRecordingBtn,
+  stopRecordingBtn,
+  toggleMotionFollowBtn,
+  toggleLayoutBtn,
+  retryPlaybackBtn
+];
 
 const statusMessage = document.getElementById("statusMessage");
 const connectionBadge = document.getElementById("connectionBadge");
@@ -361,9 +369,9 @@ function applyRecordingButtons() {
 
 function applyLiveControlsVisibility() {
   const hideCameraHudControls = role === "camera";
-  cameraHudOnlyControls.forEach((button) => {
+  controlsHiddenForCameraRole.forEach((button) => {
     if (!button) return;
-    button.classList.toggle("hidden", hideCameraHudControls);
+    button.style.display = hideCameraHudControls ? "none" : "";
     button.setAttribute("aria-hidden", hideCameraHudControls ? "true" : "false");
   });
 }
