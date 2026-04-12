@@ -511,7 +511,7 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   card.tabIndex = 0;
 
   const mediaFrame = document.createElement("div");
-  mediaFrame.className = "relative aspect-video overflow-hidden rounded-xl bg-black/90";
+  mediaFrame.className = "mediaFrame relative overflow-hidden rounded-xl bg-black/90";
 
   const video = document.createElement("video");
   video.id = `video-${id}`;
@@ -534,7 +534,7 @@ function buildParticipantTile(id, displayName, isLocal = false) {
   mediaFrame.append(video, loadingOverlay, placeholder);
 
   const footer = document.createElement("div");
-  footer.className = "mt-2 flex items-center justify-between gap-2";
+  footer.className = "tileFooter mt-1 flex items-center justify-between gap-2";
 
   const name = document.createElement("p");
   name.id = `name-${id}`;
