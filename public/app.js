@@ -3,6 +3,7 @@ const socket = io(window.location.origin, {
   reconnection: true,
   reconnectionAttempts: 5,
   timeout: 20000,
+const socket = io({
   autoConnect: false,
   auth: (cb) => cb(buildSocketAuth())
 });

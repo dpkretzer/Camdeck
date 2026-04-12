@@ -178,7 +178,44 @@ function parseRoomCode(rawValue) {
   return {
     roomNumber: (roomPart || '').trim().toUpperCase(),
     accessKey: normalizeAccessKey(accessPart || '')
+function normalizeAccessKey(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeRole(value) {
+  const role = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return role === ROLE.CAMERA || role === ROLE.VIEWER ? role : '';
+}
+
+function parseRoomCode(rawValue) {
+  const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+  if (!value) return { roomNumber: '', accessKey: '' };
+  const [roomPart, accessPart] = value.split(':');
+  return {
+    roomNumber: (roomPart || '').trim().toUpperCase(),
+    accessKey: normalizeAccessKey(accessPart || '')
   };
+}
+
+function validateHandshakeAuth(rawAuth) {
+  if (!rawAuth || typeof rawAuth !== 'object') {
+    return { ok: false, error: 'Invalid credentials' };
+  }
+
+  const normalized = {
+    roomId: normalizeRoomId(rawAuth.roomId),
+    roomCode: typeof rawAuth.roomCode === 'string' ? rawAuth.roomCode.trim() : '',
+    accessKey: normalizeAccessKey(rawAuth.accessKey),
+    role: normalizeRole(rawAuth.role),
+    name: sanitizeName(rawAuth.name || '', 'Participant')
+  };
+
+  if (!normalized.role) return { ok: false, error: 'Invalid credentials' };
+  if (normalized.roomId.length > 128 || normalized.roomCode.length > 256 || normalized.accessKey.length > 256) {
+    return { ok: false, error: 'Invalid credentials' };
+  }
+
+  return { ok: true, data: normalized };
 }
 
 function validateHandshakeAuth(rawAuth) {
@@ -274,7 +311,8 @@ function createAppAndServer(config = getSecurityConfig()) {
 
   const io = new Server(server, {
     cors: {
-      origin: '*',
+      origin: originChecker,
+      credentials: true,
       methods: ['GET', 'POST']
     }
   });
@@ -298,6 +336,25 @@ function createAppAndServer(config = getSecurityConfig()) {
       while (roomByNumber.has(roomNumber)) {
         roomNumber = createRoomNumber(config.roomCodeLength);
       }
+  const roomSafetyAgent = createRoomSafetyAgent();
+
+  app.get('/api/agent/rooms', (req, res) => {
+    const roomSummaries = roomSafetyAgent.summarizeRooms(rooms);
+    const healthyCount = roomSummaries.filter((room) => room.status === 'healthy').length;
+    res.json({
+      generatedAt: new Date().toISOString(),
+      roomCount: roomSummaries.length,
+      healthyCount,
+      attentionCount: roomSummaries.length - healthyCount,
+      rooms: roomSummaries
+    });
+  });
+
+  function createRoom() {
+    const roomId = `r_${generateToken(16)}`;
+    let roomNumber = createRoomNumber(config.roomCodeLength);
+    while (roomByNumber.has(roomNumber)) {
+      roomNumber = createRoomNumber(config.roomCodeLength);
     }
 
     const accessKey = `k_${generateToken(Math.ceil(config.accessKeyLength / 1.4))}`;
@@ -453,6 +510,22 @@ function createAppAndServer(config = getSecurityConfig()) {
 
       roomIdByNumber = roomByNumber.get(roomNumber);
       room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
+      if (!room || !isAccessKeyValid(room, accessKey)) {
+        joinThrottleByIp.registerFailure(ipKey);
+        joinThrottleByRoom.registerFailure(roomNumber || 'unknown');
+        logger.warn('socket.authorize_failed', { socketId: socket.id, ip: ipKey, roomNumber, accessKey: maskSecret(accessKey) });
+        callback?.({ ok: false, error: 'Invalid credentials' });
+        return;
+      }
+
+        const room = createRoom();
+        socket.data.authorizedRoomId = room.id;
+        callback?.({ ok: true, created: true, roomNumber: room.roomNumber, roomId: room.id, accessKey: room.accessKey, roomCode: `${room.roomNumber}:${room.accessKey}` });
+        return;
+      }
+
+      const roomIdByNumber = roomByNumber.get(roomNumber);
+      const room = roomIdByNumber ? rooms.get(roomIdByNumber) : null;
       if (!room || !isAccessKeyValid(room, accessKey)) {
         joinThrottleByIp.registerFailure(ipKey);
         joinThrottleByRoom.registerFailure(roomNumber || 'unknown');
@@ -647,6 +720,7 @@ if (require.main === module) {
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
     console.log('Server running on port', port);
+    console.log(`Server running on http://localhost:${port}`);
   });
 }
 
@@ -656,5 +730,6 @@ module.exports = {
   validateHandshakeAuth,
   parseRoomCode,
   sanitizeName,
-  createJoinThrottle
+  createJoinThrottle,
+  createRoomSafetyAgent
 };

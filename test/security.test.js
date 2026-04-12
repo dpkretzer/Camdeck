@@ -6,7 +6,8 @@ const {
   parseRoomCode,
   sanitizeName,
   createJoinThrottle,
-  getSecurityConfig
+  getSecurityConfig,
+  createRoomSafetyAgent
 } = require('../server');
 
 test('rejects missing handshake auth payload', () => {
@@ -55,4 +56,22 @@ test('production config fails without secret', () => {
 
 test('sanitizeName trims and strips dangerous chars', () => {
   assert.equal(sanitizeName('  <b>Cam   1</b>  ', 'x'), 'bCam 1/b');
+});
+
+test('room safety agent marks unhealthy room states', () => {
+  const agent = createRoomSafetyAgent();
+  const room = {
+    id: 'r_1',
+    roomNumber: 'ABCD',
+    members: new Set(['a', 'b']),
+    cameras: new Set(),
+    viewers: new Set(['v_1', 'v_2']),
+    recording: { active: false }
+  };
+
+  const summary = agent.summarizeRoom(room);
+  assert.equal(summary.status, 'attention');
+  assert.equal(summary.cameraCount, 0);
+  assert.equal(summary.viewerCount, 2);
+  assert.ok(summary.alerts.length > 0);
 });
