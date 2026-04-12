@@ -76,7 +76,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
-  background: linear-gradient(180deg, rgba(18, 24, 33, 0.96), rgba(11, 16, 23, 0.95));
+  background: linear-gradient(180deg, #3a3d3e, var(--onyx));
   box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
