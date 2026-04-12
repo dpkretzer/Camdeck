@@ -20,3 +20,7 @@ Room access:
 - Share that full room code with trusted viewers/cameras so they can join.
 
 If the page loads but cannot join rooms, verify the server is running and open `http://localhost:3000` (not the HTML file directly).
+
+Agent endpoint:
+
+- `GET /api/agent/rooms` returns a live safety summary for all active rooms, including camera/viewer counts and alerts when a room needs attention.

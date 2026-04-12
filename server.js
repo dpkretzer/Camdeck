@@ -239,6 +239,38 @@ function createJoinThrottle(windowMs, maxAttempts) {
   return { registerFailure, canAttempt, clear };
 }
 
+function createRoomSafetyAgent() {
+  function summarizeRoom(room) {
+    if (!room || typeof room !== 'object') return null;
+    const cameraCount = room.cameras?.size || 0;
+    const viewerCount = room.viewers?.size || 0;
+    const memberCount = room.members?.size || 0;
+    const recordingActive = room.recording?.active === true;
+
+    const alerts = [];
+    if (cameraCount === 0 && viewerCount > 0) alerts.push('Viewers are connected, but no camera is currently online.');
+    if (viewerCount > 10) alerts.push('High viewer count detected. Verify all viewers are trusted.');
+    if (recordingActive && cameraCount === 0) alerts.push('Recording is marked active without an online camera.');
+
+    return {
+      roomId: room.id,
+      roomNumber: room.roomNumber,
+      memberCount,
+      cameraCount,
+      viewerCount,
+      recordingActive,
+      status: alerts.length > 0 ? 'attention' : 'healthy',
+      alerts
+    };
+  }
+
+  function summarizeRooms(rooms) {
+    return [...rooms.values()].map((room) => summarizeRoom(room)).filter(Boolean);
+  }
+
+  return { summarizeRoom, summarizeRooms };
+}
+
 function createAppAndServer(config = getSecurityConfig()) {
   const logger = createLogger();
   const app = express();
@@ -282,6 +314,19 @@ function createAppAndServer(config = getSecurityConfig()) {
   const participantBySocketId = new Map();
   const joinThrottleByIp = createJoinThrottle(config.joinRateLimitWindowMs, config.joinRateLimitMax);
   const joinThrottleByRoom = createJoinThrottle(config.joinRateLimitWindowMs, Math.max(3, Math.floor(config.joinRateLimitMax / 2)));
+  const roomSafetyAgent = createRoomSafetyAgent();
+
+  app.get('/api/agent/rooms', (req, res) => {
+    const roomSummaries = roomSafetyAgent.summarizeRooms(rooms);
+    const healthyCount = roomSummaries.filter((room) => room.status === 'healthy').length;
+    res.json({
+      generatedAt: new Date().toISOString(),
+      roomCount: roomSummaries.length,
+      healthyCount,
+      attentionCount: roomSummaries.length - healthyCount,
+      rooms: roomSummaries
+    });
+  });
 
   function createRoom() {
     const roomId = `r_${generateToken(16)}`;
@@ -615,5 +660,6 @@ module.exports = {
   validateHandshakeAuth,
   parseRoomCode,
   sanitizeName,
-  createJoinThrottle
+  createJoinThrottle,
+  createRoomSafetyAgent
 };
