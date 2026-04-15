@@ -6,7 +6,7 @@
   <title>KoziKamera Security</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
@@ -42,7 +42,6 @@
             <label for="roomId">Room code</label>
             <input id="roomId" type="password" placeholder="Example: FRONTDOOR:k_xxx" inputmode="text" />
 
-
             <label for="cameraSelect">Camera device</label>
             <select id="cameraSelect"></select>
           </div>
@@ -54,10 +53,10 @@
         </div>
       </section>
 
-      <section id="roleScreen" class="screen glass-panel">
+      <section id="roleScreen" class="screen glass-panel role-panel">
         <h2 class="panel-title">Connection Established</h2>
         <p class="panel-text">Select how this device should participate in the active room.</p>
-        <div class="control-row">
+        <div class="control-row role-actions">
           <button id="startCamera">Deploy as camera</button>
           <button id="startViewer">View camera feeds</button>
           <button id="changeRoom" class="secondary">Change room</button>
@@ -65,18 +64,19 @@
       </section>
 
       <section id="liveScreen" class="screen glass-panel live-panel">
-        <section class="live-section live-header">
-          <div class="viewer-header-title-row">
-            <h2 class="panel-title viewer-mobile-title">Live Viewer</h2>
-          </div>
-          <div class="live-info-bar compact">
-            <span id="roleInfoChip" class="info-chip">None</span>
-            <span id="connectionBadge" class="connection-badge">Connecting…</span>
-          </div>
-        </section>
+        <div class="live-main-column">
+          <section class="live-section live-header">
+            <div class="viewer-header-title-row">
+              <h2 class="panel-title viewer-mobile-title">Live Viewer</h2>
+            </div>
+            <div class="live-info-bar compact">
+              <span id="roleInfoChip" class="info-chip">None</span>
+              <span id="connectionBadge" class="connection-badge">Connecting…</span>
+            </div>
+          </section>
 
-        <section class="live-section live-status-controls">
-          <div class="control-row dense viewer-controls-grid">
+          <section class="live-section live-status-controls">
+            <div class="control-row dense viewer-controls-grid">
               <button id="toggleMute" class="secondary">Mute</button>
               <button id="toggleCamera" class="secondary">Camera off</button>
               <div class="record-toggle-group">
@@ -88,29 +88,32 @@
               <button id="retryPlayback" class="secondary retry-btn">Retry Video</button>
               <button id="disconnectRoom" class="danger">Disconnect</button>
             </div>
-        </section>
+          </section>
 
-        <section class="live-section live-grid-section">
-          <div class="feed-card-overlay" aria-live="polite">
-            <span id="hudMicBadge" class="hud-badge">MIC --</span>
-            <span id="hudCameraBadge" class="hud-badge">CAM --</span>
-            <span id="hudRecordingBadge" class="hud-badge">REC --</span>
-            <span id="hudOnlineBadge" class="hud-badge">NET --</span>
-          </div>
-          <p id="emptyState" class="empty-state">No cameras connected — deploy a camera to start monitoring.</p>
-          <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
-        </section>
+          <section class="live-section live-grid-section">
+            <div class="feed-card-overlay" aria-live="polite">
+              <span id="hudMicBadge" class="hud-badge">MIC --</span>
+              <span id="hudCameraBadge" class="hud-badge">CAM --</span>
+              <span id="hudRecordingBadge" class="hud-badge">REC --</span>
+              <span id="hudOnlineBadge" class="hud-badge">NET --</span>
+            </div>
+            <p id="emptyState" class="empty-state">No cameras connected — deploy a camera to start monitoring.</p>
+            <div id="remoteVideos" class="feed-grid mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"></div>
+          </section>
 
-        <section class="live-section slim-status-row">
-          <div class="status-row">
-            <div id="statusMessage" class="status-text" role="status" aria-live="polite"></div>
-          </div>
-        </section>
+          <section class="live-section slim-status-row">
+            <div class="status-row">
+              <div id="statusMessage" class="status-text" role="status" aria-live="polite"></div>
+            </div>
+          </section>
+        </div>
 
-        <section id="timelinePanel" class="timeline-panel live-section" aria-live="polite">
-          <h2 class="panel-title">Session timeline</h2>
-          <ul id="sessionTimeline"></ul>
-        </section>
+        <aside class="live-side-column">
+          <section id="timelinePanel" class="timeline-panel live-section" aria-live="polite">
+            <h2 class="panel-title">Session timeline</h2>
+            <ul id="sessionTimeline"></ul>
+          </section>
+        </aside>
       </section>
     </div>
   </main>
